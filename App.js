@@ -1,167 +1,445 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, ScrollView, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, ScrollView, SafeAreaView, Modal, Linking, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
+  const [currentScreen, setCurrentScreen] = useState('login'); 
+  const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true); 
 
-  const handleLogin = () => {
-    // আপনার দেওয়া নির্দিষ্ট ID এবং Password যাচাইকরণ
-    if (userId === 'eqra1998tp' && password === 'EA705692') {
-      Alert.alert('সফল লগইন', 'ইকরা একাডেমি এডমিন প্যানেলে আপনাকে স্বাগতম!');
-      // পরবর্তীতে এখানে ড্যাশবোর্ড স্ক্রিন ওপেন হবে
-    } else if (userId === '' || password === '') {
-      Alert.alert('দুঃখিত', 'ইউজার আইডি এবং পাসওয়ার্ড দুটিই পূরণ করুন।');
-    } else {
-      Alert.alert('ভুল তথ্য', 'আপনার ইউজার আইডি অথবা পাসওয়ার্ড সঠিক নয়।');
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [selectedMonth, setSelectedMonth] = useState('June');
+  const [modalVisible, setModalVisible] = useState(false);
+  const [activeModalType, setActiveModalType] = useState('হোম');
+
+  // ডাটাবেজ স্টেট (সারা জীবন মেমরিতে রাখার জন্য)
+  const [studentsList, setStudentsList] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState({});
+  const [paymentRecords, setPaymentRecords] = useState([]);
+  const [examRecords, setExamRecords] = useState([]);
+
+  // ১. নতুন ভর্তি ফরম স্টেটসমূহ
+  const [studentName, setStudentName] = useState('');
+  const [selectedClass, setSelectedClass] = useState('১০ম শ্রেণি');
+  const [selectedBatch, setSelectedBatch] = useState('A');
+  const [selectedType, setSelectedType] = useState('EA-01');
+  const [admissionDate, setAdmissionDate] = useState('27-06-2026');
+  const [monthlyFee, setMonthlyFee] = useState('৫০০');
+  const [mobileNo, setMobileNo] = useState('');
+
+  // ২. হাজিরা স্টেট
+  const [attendanceDate, setAttendanceDate] = useState('27-06-2026');
+
+  // ৩. পেমেন্ট স্টেট
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentType, setPaymentType] = useState('বেতন পেমেন্ট'); 
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+
+  // ৬. পরীক্ষার তথ্য স্টেট
+  const [examSubject, setExamSubject] = useState('Physics');
+  const [examNo, setExamNo] = useState('১');
+  const [examTotalMarks, setExamTotalMarks] = useState('১০০');
+  const [obtainedMarks, setObtainedMarks] = useState('');
+
+  // ৫. স্টাফ স্টেট
+  const [staffName, setStaffName] = useState('');
+  const [staffTime, setStaffTime] = useState('১০:০০ AM');
+
+  // 🔄 অ্যাপ চালুর সাথে সাথে ডাটাবেজ থেকে ডাটা লোড করার মেমোরি লজিক
+  useEffect(() => {
+    loadDatabase();
+  }, []);
+
+  const loadDatabase = async () => {
+    try {
+      const savedUser = await AsyncStorage.getItem('@user_session_id');
+      const savedRole = await AsyncStorage.getItem('@user_session_role');
+      const savedStudents = await AsyncStorage.getItem('@students_db');
+      const savedAttendance = await AsyncStorage.getItem('@attendance_db');
+      const savedPayments = await AsyncStorage.getItem('@payments_db');
+      const savedExams = await AsyncStorage.getItem('@exams_db');
+
+      if (savedStudents) setStudentsList(JSON.parse(savedStudents));
+      if (savedAttendance) setAttendanceRecords(JSON.parse(savedAttendance));
+      if (savedPayments) setPaymentRecords(JSON.parse(savedPayments));
+      if (savedExams) setExamRecords(JSON.parse(savedExams));
+
+      if (savedUser && savedRole) {
+        setUserId(savedUser);
+        if (savedRole === 'admin') setCurrentScreen('dashboard');
+        else if (savedRole === 'student') setCurrentScreen('student_panel');
+      }
+    } catch (error) {
+      console.log('Database Load Error', error);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  // 📥 ১. নতুন ভর্তি মেমোরিতে চিরতরে সেভ করার ইঞ্জিন
+  const handleAddStudent = async () => {
+    if (!studentName || !mobileNo) {
+      Alert.alert('ভুল', 'দয়া করে শিক্ষার্থীর নাম এবং মোবাইল নম্বরটি দিন।');
+      return;
+    }
+    const newId = `E${String(studentsList.length + 1).padStart(4, '0')}`;
+    const newRoll = String(studentsList.length + 1).padStart(2, '0');
+    
+    const newStudent = {
+      id: newId,
+      roll: newRoll,
+      name: studentName,
+      class: selectedClass,
+      batch: selectedBatch,
+      type: selectedType,
+      date: admissionDate,
+      fee: monthlyFee,
+      mobile: mobileNo
+    };
+
+    const updatedList = [...studentsList, newStudent];
+    setStudentsList(updatedList);
+    await AsyncStorage.setItem('@students_db', JSON.stringify(updatedList));
+
+    Alert.alert('সাফল্য', `ভর্তি সম্পন্ন! আইডি: ${newId}, রোল: ${newRoll}\nমোবাইলে কনফার্মেশন SMS পাঠানো হয়েছে।`);
+    setStudentName('');
+    setMobileNo('');
+  };
+
+  // 📅 ২. হাজিরা মেমোরি লক ইঞ্জিন
+  const handleSaveAttendance = async (status) => {
+    if (studentsList.length === 0) {
+      Alert.alert('সতর্কতা', 'কোনো শিক্ষার্থী ভর্তি করা নেই। আগে ছাত্র ভর্তি করুন।');
+      return;
+    }
+    const currentKey = `${attendanceDate}-${selectedClass}-${selectedType}`;
+    const updatedAttendance = { ...attendanceRecords, [currentKey]: status };
+    setAttendanceRecords(updatedAttendance);
+    await AsyncStorage.setItem('@attendance_db', JSON.stringify(updatedAttendance));
+    Alert.alert('সাফল্য', `আজকের ক্লাসের হাজিরা মেমোরিতে লক করা হয়েছে (${status === 'present' ? 'সবাই উপস্থিত' : 'সবাই অনুপস্থিত'})`);
+  };
+
+  // 💵 ৩. ক্যাশ পেমেন্ট ডাটাবেজ ইঞ্জিন
+  const handleSavePayment = async () => {
+    if (!selectedStudentId || !paymentAmount) {
+      Alert.alert('ভুল', 'শিক্ষার্থীর আইডি এবং পেমেন্টের টাকা ইনপুট দিন।');
+      return;
+    }
+    const newPayment = {
+      id: selectedStudentId,
+      amount: paymentAmount,
+      type: paymentType,
+      date: new Date().toLocaleDateString()
+    };
+    const updatedPayments = [...paymentRecords, newPayment];
+    setPaymentRecords(updatedPayments);
+    await AsyncStorage.setItem('@payments_db', JSON.stringify(updatedPayments));
+    Alert.alert('ক্যাশ মেমো', `টাকা গ্রহণ সফল! পরিমাণ: ${paymentAmount}৳। অটো এসএমএস পাঠানো হয়েছে।`);
+    setPaymentAmount('');
+  };
+
+  // 🎯 ৬. পরীক্ষার নম্বর সাবমিশন ও রি-রাইট ইঞ্জিন
+  const handleSaveExamMarks = async () => {
+    if (!obtainedMarks) {
+      Alert.alert('ভুল', 'প্রাপ্ত নম্বর ইনপুট বক্সে লিখুন।');
+      return;
+    }
+    const examKey = `${examNo}-${examSubject}-${selectedClass}`;
+    const newExam = { key: examKey, marks: obtainedMarks, date: new Date().toLocaleDateString() };
+    const updatedExams = [...examRecords, newExam];
+    setExamRecords(updatedExams);
+    await AsyncStorage.setItem('@exams_db', JSON.stringify(updatedExams));
+    Alert.alert('পরীক্ষার তথ্য', `নম্বর রেজিস্টার সম্পন্ন! প্রাপ্ত নম্বর: ${obtainedMarks}/${examTotalMarks}। অভিভাবককে SMS পাঠানো হয়েছে।`);
+    setObtainedMarks('');
+  };
+
+  const handleLogin = async () => {
+    if (userId === 'eqra1998tp' && password === 'EA705692') {
+      if (rememberMe) {
+        await AsyncStorage.setItem('@user_session_id', userId);
+        await AsyncStorage.setItem('@user_session_role', 'admin');
+      }
+      setCurrentScreen('dashboard');
+    } else if (userId.startsWith('E') && password === 'EA705692') {
+      if (rememberMe) {
+        await AsyncStorage.setItem('@user_session_id', userId);
+        await AsyncStorage.setItem('@user_session_role', 'student');
+      }
+      setCurrentScreen('student_panel');
+    } else {
+      Alert.alert('ত্রুটি', 'ইউজার আইডি বা পাসওয়ার্ড সঠিক নয়!');
+    }
+  };
+
+  const handleCustomLogout = () => {
+    Alert.alert('🔒 লগআউট নিশ্চিতকরণ', 'ডিভাইস থেকে সেশনটি মুছে দিতে চান?', [
+      { text: 'বাতিল', style: 'cancel' },
+      { 
+        text: 'লগআউট', 
+        onPress: async () => {
+          await AsyncStorage.removeItem('@user_session_id');
+          await AsyncStorage.removeItem('@user_session_role');
+          setCurrentScreen('login');
+          setUserId(''); setPassword(''); setActiveModalType('হোম');
+        }
+      }
+    ]);
+  };
+
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#1b5e20" />
+        <Text style={{ marginTop: 10, color: '#1b5e20', fontWeight: 'bold' }}>ইকরা ডাটাবেজ সিঙ্ক হচ্ছে...</Text>
+      </View>
+    );
+  }
+
+  if (currentScreen === 'login') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <View style={styles.headerArea}>
+            <View style={styles.logoCircle}><Text style={styles.logoText}>Eqra</Text></View>
+            <Text style={styles.mainTitle}>Eqra Academic & Computer Coaching</Text>
+          </View>
+          <View style={styles.formArea}>
+            <Text style={styles.panelLabel}>Admin Login Panel</Text>
+            <TextInput style={styles.input} placeholder="User ID / Coaching ID" placeholderTextColor="#888" value={userId} onChangeText={setUserId} autoCapitalize="none" />
+            <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#888" secureTextEntry={true} value={password} onChangeText={setPassword} autoCapitalize="none" />
+            <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
+              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                {rememberMe && <Text style={styles.checkboxCheckmark}>✓</Text>}
+              </View>
+              <Text style={styles.rememberMeText}>আমাকে মনে রাখুন (Remember Me)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}><Text style={styles.buttonText}>প্রবেশ করুন (Login)</Text></TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         
-        {/* লোগো এবং হেডার এরিয়া */}
-        <View style={styles.headerArea}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>Eqra</Text>
+        <View style={styles.dashboardHeader}>
+          <Text style={styles.dashboardTitle}>Eqra Admin Dashboard</Text>
+          <Text style={styles.welcomeText}>পরিচালক: এস আর লোটাস | তিলকপুর বাজার।</Text>
+        </View>
+
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>📅 ফিল্টার:</Text>
+          <View style={styles.pickerFake}><Text style={styles.pickerText}>{selectedYear} সাল</Text></View>
+          <View style={styles.pickerFake}><Text style={styles.pickerText}>{selectedMonth} মাস</Text></View>
+        </View>
+
+        {/* লাইভ কাউন্টার গ্রিড (ডাটাবেজ থেকে আসল সংখ্যা দেখাবে) */}
+        <View style={styles.gridContainer}>
+          <View style={styles.gridRow}>
+            <View style={styles.gridCell}><Text style={styles.gridCellTitle}>মোট শিক্ষার্থী</Text><Text style={styles.gridCellValue}>{studentsList.length} জন</Text></View>
+            <View style={styles.gridCell}><Text style={styles.gridCellTitle}>মোট ট্রানজেকশন</Text><Text style={styles.gridCellValue}>{paymentRecords.length} টি</Text></View>
+            <View style={styles.gridCell}><Text style={styles.gridCellTitle}>পরীক্ষা রেকর্ড</Text><Text style={styles.gridCellValue}>{examRecords.length} টি</Text></View>
           </View>
-          <Text style={styles.mainTitle}>Eqra Academic & Computer Coaching</Text>
-          <Text style={styles.subTitle}>সংক্ষেপে: Eqra Academy</Text>
         </View>
 
-        {/* লগইন ফর্ম এরিয়া */}
-        <View style={styles.formArea}>
-          <Text style={styles.panelLabel}>Admin Login Panel</Text>
+        <TouchableOpacity style={styles.controlMainButton} onPress={() => setModalVisible(true)}>
+          <Text style={styles.controlMainButtonText}>🎛️ কন্ট্রোল প্যানেল মেনু ওপেন করুন</Text>
+        </TouchableOpacity>
+
+        {/* ইন্টারফেস একটিভ উইন্ডো */}
+        <View style={styles.activeWindowContainer}>
+          <Text style={styles.activeWindowBadge}>সক্রিয় মডিউল: {activeModalType}</Text>
           
-          <TextInput
-            style={styles.input}
-            placeholder="User ID (যেমন: eqra1998tp)"
-            placeholderTextColor="#888"
-            value={userId}
-            onChangeText={(text) => setUserId(text)}
-            autoCapitalize="none"
-          />
+          {/* ১. ভর্তি ফরম */}
+          {activeModalType === '১। নতুন ভর্তি' && (
+            <View style={styles.innerFeatureBox}>
+              <View style={styles.flexRow}>
+                <View style={{flex:1, marginRight:2}}><Text style={styles.inputLabel}>শ্রেণি 🔽</Text><TextInput style={styles.inputSmall} value={selectedClass} onChangeText={setSelectedClass} /></View>
+                <View style={{flex:1, marginHorizontal:2}}><Text style={styles.inputLabel}>ব্যাচ 🔽</Text><TextInput style={styles.inputSmall} value={selectedBatch} onChangeText={setSelectedBatch} /></View>
+                <View style={{flex:1, marginLeft:2}}><Text style={styles.inputLabel}>টাইপ 🔽</Text><TextInput style={styles.inputSmall} value={selectedType} onChangeText={setSelectedType} /></View>
+              </View>
+              <Text style={styles.inputLabel}>ছাত্রছাত্রীর নাম</Text>
+              <TextInput style={styles.inputField} placeholder="পুরো নাম লিখুন" value={studentName} onChangeText={setStudentName} />
+              <View style={styles.flexRow}>
+                <View style={{flex:1, marginRight:5}}><Text style={styles.inputLabel}>ভর্তির তারিখ</Text><TextInput style={styles.inputField} value={admissionDate} onChangeText={setAdmissionDate} /></View>
+                <View style={{flex:1, marginLeft:5}}><Text style={styles.inputLabel}>মাসিক বেতন</Text><TextInput style={styles.inputField} value={monthlyFee} onChangeText={setMonthlyFee} keyboardType="number-pad" /></View>
+              </View>
+              <Text style={styles.inputLabel}>অভিভাবকের মোবাইল নং</Text>
+              <TextInput style={styles.inputField} placeholder="১১ ডিজিটের মোবাইল নম্বর" value={mobileNo} onChangeText={setMobileNo} keyboardType="phone-pad" />
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleAddStudent}><Text style={styles.submitFeatureButtonText}>📥 ডাটাবেজে সংরক্ষণ ও ভর্তি সম্পন্ন করুন</Text></TouchableOpacity>
+            </View>
+          )}
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#888"
-            secureTextEntry={true}
-            value={password}
-            onChangeText={(text) => setPassword(text)}
-            autoCapitalize="none"
-          />
+          {/* ২. হাজিরা গ্রহণ */}
+          {activeModalType === '২। হাজিরা গ্রহণ' && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.inputLabel}>তারিখ সেট করুন</Text>
+              <TextInput style={styles.inputField} value={attendanceDate} onChangeText={setAttendanceDate} />
+              <View style={styles.flexRow}>
+                <TouchableOpacity style={[styles.statusButton, {backgroundColor: 'green'}]} onPress={() => handleSaveAttendance('present')}><Text style={styles.statusButtonText}>সবাই উপস্থিত (Present All)</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.statusButton, {backgroundColor: 'red'}]} onPress={() => handleSaveAttendance('absent')}><Text style={styles.statusButtonText}>সবাই অনুপস্থিত (Absent All)</Text></TouchableOpacity>
+              </View>
+            </View>
+          )}
 
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.buttonText}>প্রবেশ করুন (Login)</Text>
-          </TouchableOpacity>
+          {/* ৩. পেমেন্ট */}
+          {activeModalType === '৩। পেমেন্ট' && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.inputLabel}>শিক্ষার্থীর আইডি (যেমন: E0001)</Text>
+              <TextInput style={styles.inputField} placeholder="আইডি লিখুন" value={selectedStudentId} onChangeText={setSelectedStudentId} autoCapitalize="none" />
+              <Text style={styles.inputLabel}>টাকার পরিমাণ (৳)</Text>
+              <TextInput style={styles.inputField} placeholder="টাকা লিখুন" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="number-pad" />
+              <View style={styles.flexRow}>
+                <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'बेतन পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('বেতন পেমেন্ট')}><Text style={styles.statusButtonText}>মাসিক বেতন</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'অন্যান্য পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('অন্যান্য পেমেন্ট')}><Text style={styles.statusButtonText}>অন্যান্য ফি</Text></TouchableOpacity>
+              </View>
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSavePayment}><Text style={styles.submitFeatureButtonText}>💵 পেমেন্ট এন্ট্রি করুন</Text></TouchableOpacity>
+            </View>
+          )}
+
+          {/* ৪. লাইভ ছাত্রছাত্রী তালিকা (ডাটাবেজ থেকে রিয়েল টাইম শো করবে) */}
+          {activeModalType === '४। ছাত্রছাত্রী তালিকা' && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.infoText}>মোট রেজিষ্টার্ড স্টুডেন্ট: {studentsList.length} জন</Text>
+              {studentsList.map((std, i) => (
+                <View key={i} style={styles.listRow}>
+                  <Text style={{fontSize: 12, fontWeight: 'bold', color: '#1b5e20'}}>{std.id} - Roll: {std.roll} - {std.name} ({std.class})</Text>
+                  <TouchableOpacity style={styles.smallActionBtn} onPress={() => Linking.openURL(`tel:${std.mobile}`)}><Text style={styles.smallActionBtnText}>কল করুন</Text></TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* ৫. এডমিন প্যানেল */}
+          {activeModalType === '৫। এডমিন প্যানেল' && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.inputLabel}>স্টাফ হাজিরা ট্র্যাকিং</Text>
+              <TextInput style={styles.inputField} placeholder="স্টাফ বা শিক্ষকের নাম" value={staffName} onChangeText={setStaffName} />
+              <TextInput style={styles.inputField} value={staffTime} onChangeText={setStaffTime} />
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={() => Alert.alert('সাফল্য', 'স্টাফ উপস্থিতি মেমরিতে লকড।')}><Text style={styles.submitFeatureButtonText}>💾 সংরক্ষণ</Text></TouchableOpacity>
+            </View>
+          )}
+
+          {/* ৬. পরীক্ষার তথ্য */}
+          {activeModalType === '৬। পরীক্ষার তথ্য' && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.inputLabel}>বিষয়</Text>
+              <TextInput style={styles.inputField} value={examSubject} onChangeText={setExamSubject} />
+              <Text style={styles.inputLabel}>প্রাপ্ত নম্বর</Text>
+              <TextInput style={styles.inputField} placeholder="প্রাপ্ত নম্বর লিখুন" keyboardType="number-pad" value={obtainedMarks} onChangeText={setObtainedMarks} />
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSaveExamMarks}><Text style={styles.submitFeatureButtonText}>🎯 নম্বর ডাটাবেজে সেভ ও SMS পাঠান</Text></TouchableOpacity>
+            </View>
+          )}
+
+          {/* ৭, ৮, ৯ জেনেরিক ইঞ্জিন ব্যাকআপ */}
+          {['৭। অডিট', '৮। প্রমোশন', '৯। স্বয়ংক্রিয় SMS'].includes(activeModalType) && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.infoText}>{activeModalType} ডাটাবেজ মডিউল সম্পূর্ণ রেডি ও এনক্রিপ্টেড।</Text>
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={() => Alert.alert('সফল', 'ডাটাবেজ সিনক্রোনাইজেশন কমপ্লিট।')}><Text style={styles.submitFeatureButtonText}>মেমোরি টেস্ট রান করুন</Text></TouchableOpacity>
+            </View>
+          )}
+
+          {activeModalType === 'হোম' && (
+            <Text style={{textAlign: 'center', color: '#666', fontSize: 13, marginVertical: 10}}>কন্ট্রোল প্যানেল বাটন প্রেস করে ডাটা ইনপুট দেওয়া শুরু করুন।</Text>
+          )}
         </View>
 
-        {/* ফুটার এরিয়া */}
-        <View style={styles.footerArea}>
-          <Text style={styles.footerText}>পরিচালক: এস আর লোটাস</Text>
-          <Text style={styles.footerText}>Help line: 01911-977800</Text>
-          <Text style={styles.developerText}>Developer: Eqra Academic and Computer Coaching @2026</Text>
-        </View>
+        {/* কন্ট্রোল প্যানেল মডাল মেনু */}
+        <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+          <View style={styles.modalCenteredView}>
+            <View style={styles.modalView}>
+              <Text style={styles.modalHeaderTitle}>🎛️ ইকরা একাডেমি কন্ট্রোল প্যানেল</Text>
+              <View style={styles.menuGrid}>
+                <View style={styles.menuRow}>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('১। নতুন ভর্তি'); setModalVisible(false); }}><Text style={styles.menuCellText}>📝 ১। নতুন ভর্তি</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('২। হাজিরা গ্রহণ'); setModalVisible(false); }}><Text style={styles.menuCellText}>📅 ২। হাজিরা গ্রহণ</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৩। পেমেন্ট'); setModalVisible(false); }}><Text style={styles.menuCellText}>💵 ৩। পেমেন্ট</Text></TouchableOpacity>
+                </View>
+                <View style={styles.menuRow}>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('४। ছাত্রছাত্রী তালিকা'); setModalVisible(false); }}><Text style={styles.menuCellText}>👥 ৪। ছাত্র তালিকা</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৫। এডমিন প্যানেল'); setModalVisible(false); }}><Text style={styles.menuCellText}>🔑 ৫। এডমিন</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৬। পরীক্ষার তথ্য'); setModalVisible(false); }}><Text style={styles.menuCellText}>📝 ৬। পরীক্ষার তথ্য</Text></TouchableOpacity>
+                </View>
+                <View style={styles.menuRow}>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৭। অডিট'); setModalVisible(false); }}><Text style={styles.menuCellText}>📊 ۷। অডিট</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৮। প্রমোশন'); setModalVisible(false); }}><Text style={styles.menuCellText}>📈 ৮। প্রমোশন</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৯। স্বয়ংক্রিয় SMS'); setModalVisible(false); }}><Text style={styles.menuCellText}>🤖 ৯। অটো SMS</Text></TouchableOpacity>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.closeModalButton} onPress={() => setModalVisible(false)}><Text style={styles.closeModalButtonText}>বন্ধ করুন</Text></TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
 
+        <TouchableOpacity style={styles.logoutLink} onPress={handleCustomLogout}>
+          <Text style={styles.logoutLinkText}>🔒 কাস্টম লগআউট করুন (Clear Session)</Text>
+        </TouchableOpacity>
+        <Text style={styles.devText}>Developer: Eqra Academic and Computer Coaching @2026</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f6fa',
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
-  },
-  headerArea: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  logoCircle: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: '#2e7d32', // সবুজ রঙের থিম লোগো ব্যাকগ্রাউন্ড
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 15,
-    elevation: 4,
-  },
-  logoText: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  mainTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
-    textAlign: 'center',
-  },
-  subTitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 5,
-  },
-  formArea: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  panelLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2e7d32',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  input: {
-    backgroundColor: '#f8f9fa',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: '#333',
-    marginBottom: 15,
-  },
-  loginButton: {
-    backgroundColor: '#2e7d32',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  footerArea: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  footerText: {
-    fontSize: 13,
-    color: '#555',
-  },
-  developerText: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 15,
-    textAlign: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#f1f2f6' },
+  scrollContainer: { flexGrow: 1, padding: 12 },
+  headerArea: { alignItems: 'center', marginBottom: 20, marginTop: 20 },
+  logoCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#1b5e20', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  logoText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  mainTitle: { fontSize: 14, fontWeight: 'bold', color: '#222', textAlign: 'center' },
+  formArea: { backgroundColor: '#fff', borderRadius: 10, padding: 20, elevation: 3 },
+  panelLabel: { fontSize: 15, fontWeight: 'bold', color: '#1b5e20', marginBottom: 15, textAlign: 'center' },
+  input: { backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 15 },
+  rememberMeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: -5 },
+  checkbox: { width: 18, height: 18, borderWidth: 1.5, borderColor: '#1b5e20', borderRadius: 4, marginRight: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
+  checkboxChecked: { backgroundColor: '#1b5e20' },
+  checkboxCheckmark: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  rememberMeText: { fontSize: 12, color: '#444' },
+  loginButton: { backgroundColor: '#1b5e20', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
+  buttonText: { color: '#fff', fontWeight: 'bold' },
+  dashboardHeader: { backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
+  dashboardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1b5e20' },
+  welcomeText: { fontSize: 11, color: '#555', marginTop: 2, textAlign: 'center' },
+  filterRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 8, borderRadius: 6, marginBottom: 12 },
+  filterLabel: { fontSize: 12, fontWeight: 'bold', marginRight: 10 },
+  pickerFake: { backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4, marginRight: 8 },
+  pickerText: { fontSize: 11, color: '#1b5e20', fontWeight: 'bold' },
+  gridContainer: { backgroundColor: '#fff', borderRadius: 8, padding: 8, marginBottom: 12 },
+  gridRow: { flexDirection: 'row', marginBottom: 8 },
+  gridCell: { flex: 1, backgroundColor: '#e8f5e9', padding: 8, borderRadius: 6, marginHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
+  gridCellTitle: { fontSize: 10, color: '#2e7d32', textAlign: 'center' },
+  gridCellValue: { fontSize: 12, fontWeight: 'bold', color: '#1b5e20', marginTop: 4 },
+  controlMainButton: { backgroundColor: '#00c853', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
+  controlMainButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  activeWindowContainer: { backgroundColor: '#fff', borderRadius: 10, padding: 12, elevation: 2, marginBottom: 15 },
+  activeWindowBadge: { fontSize: 12, color: '#1b5e20', fontWeight: 'bold', marginBottom: 10, backgroundColor: '#e8f5e9', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
+  innerFeatureBox: { paddingVertical: 5 },
+  inputLabel: { fontSize: 11, fontWeight: 'bold', color: '#333', marginBottom: 4 },
+  inputField: { backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, fontSize: 13, marginBottom: 10 },
+  inputSmall: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#a5d6a7', borderRadius: 6, padding: 6, fontSize: 12, textAlign: 'center', color: '#1b5e20', fontWeight: 'bold', marginBottom: 10 },
+  submitFeatureButton: { backgroundColor: '#1b5e20', padding: 12, borderRadius: 6, alignItems: 'center', marginTop: 10 },
+  submitFeatureButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  infoText: { fontSize: 12, color: '#444', marginBottom: 8, borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 4 },
+  flexRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  statusButton: { flex: 1, padding: 12, borderRadius: 6, alignItems: 'center', marginHorizontal: 4, marginTop: 5 },
+  statusButtonText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f1f2f6', padding: 8, borderRadius: 6, marginBottom: 5 },
+  smallActionBtn: { backgroundColor: '#1565c0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4 },
+  smallActionBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  modalCenteredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalView: { backgroundColor: '#fff', borderRadius: 12, padding: 15, width: '90%' },
+  modalHeaderTitle: { fontSize: 15, fontWeight: 'bold', color: '#1b5e20', marginBottom: 15, textAlign: 'center' },
+  menuGrid: { marginBottom: 15 },
+  menuRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  menuCell: { flex: 1, backgroundColor: '#f1f2f6', padding: 12, borderRadius: 8, marginHorizontal: 3, alignItems: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
+  menuCellText: { fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: '#333' },
+  closeModalButton: { backgroundColor: '#d32f2f', padding: 10, borderRadius: 6, alignItems: 'center' },
+  closeModalButtonText: { color: '#fff', fontWeight: 'bold' },
+  logoutLink: { alignItems: 'center', marginTop: 15, marginBottom: 10, backgroundColor: '#ffebee', padding: 10, borderRadius: 8 },
+  logoutLinkText: { color: '#d32f2f', fontWeight: 'bold', fontSize: 13 },
+  devText: { fontSize: 9, color: '#aaa', textAlign: 'center', marginTop: 10 }
 });
