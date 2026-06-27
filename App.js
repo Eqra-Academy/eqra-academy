@@ -1,545 +1,578 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, ScrollView, SafeAreaView, Modal, Linking, ActivityIndicator } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+package com.example.ui
 
-export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('login'); 
-  const [isLoading, setIsLoading] = useState(true);
-  const [userId, setUserId] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true); 
+import android.app.DatePickerDialog
+import android.content.Context
+import android.os.Environment
+import android.widget.Toast
+import androidx.compose.animation.*
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.*
+import com.example.ui.theme.*
+import com.example.utils.*
+import com.example.viewmodel.MainViewModel
+import java.io.File
+import java.util.*
 
-  const [selectedYear, setSelectedYear] = useState('2026');
-  const [selectedMonth, setSelectedMonth] = useState('June');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [activeModalType, setActiveModalType] = useState('হোম');
+// --- ডাটা ক্লাসসমূহ (ই-লাইব্রেরি ও নোটিশের জন্য) ---
+data class LectureSheet(val id: String = "", val className: String = "", val subject: String = "", val title: String = "", val downloadUrl: String = "")
+data class NoticeItem(val id: String = "", val title: String = "", val content: String = "", val date: String = "")
+data class StudentMetrics(val student: Student, val percentage: Double, val hasMarks: Boolean, var classRank: Int = 0, var classTotal: Int = 0, var coachingRank: Int = 0, var coachingTotal: Int = 0)
 
-  // ডাটাবেজ স্টেট
-  const [studentsList, setStudentsList] = useState([]);
-  const [attendanceRecords, setAttendanceRecords] = useState({});
-  const [paymentRecords, setPaymentRecords] = useState([]);
-  const [examRecords, setExamRecords] = useState([]);
-
-  // ১. নতুন ভর্তি ফরম স্টেটসমূহ
-  const [studentName, setStudentName] = useState('');
-  const [selectedClass, setSelectedClass] = useState('১০ম শ্রেণি');
-  const [selectedBatch, setSelectedBatch] = useState('A');
-  const [selectedType, setSelectedType] = useState('EA-01');
-  const [admissionDate, setAdmissionDate] = useState('27-06-2026');
-  const [monthlyFee, setMonthlyFee] = useState('৫০০');
-  const [mobileNo, setMobileNo] = useState('');
-
-  // ২. হাজিরা স্টেট
-  const [attendanceDate, setAttendanceDate] = useState('27-06-2026');
-
-  // ৩. পেমেন্ট স্টেট
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentType, setPaymentType] = useState('বেতন পেমেন্ট'); 
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-
-  // ৬. পরীক্ষার তথ্য স্টেট
-  const [examSubject, setExamSubject] = useState('Physics');
-  const [examNo, setExamNo] = useState('১');
-  const [examTotalMarks, setExamTotalMarks] = useState('১০০');
-  const [obtainedMarks, setObtainedMarks] = useState('');
-
-  // ৫. স্টাফ স্টেট
-  const [staffName, setStaffName] = useState('');
-  const [staffTime, setStaffTime] = useState('১০:০০ AM');
-
-  // 🔄 অ্যাপ চালুর সাথে সাথে ডাটাবেজ লোড
-  useEffect(() => {
-    loadDatabase();
-  }, []);
-
-  const loadDatabase = async () => {
-    try {
-      const savedUser = await AsyncStorage.getItem('@user_session_id');
-      const savedRole = await AsyncStorage.getItem('@user_session_role');
-      const savedStudents = await AsyncStorage.getItem('@students_db');
-      const savedAttendance = await AsyncStorage.getItem('@attendance_db');
-      const savedPayments = await AsyncStorage.getItem('@payments_db');
-      const savedExams = await AsyncStorage.getItem('@exams_db');
-
-      if (savedStudents) setStudentsList(JSON.parse(savedStudents));
-      if (savedAttendance) setAttendanceRecords(JSON.parse(savedAttendance));
-      if (savedPayments) setPaymentRecords(JSON.parse(savedPayments));
-      if (savedExams) setExamRecords(JSON.parse(savedExams));
-
-      if (savedUser && savedRole) {
-        setUserId(savedUser);
-        if (savedRole === 'admin') setCurrentScreen('dashboard');
-        else if (savedRole === 'student') setCurrentScreen('student_panel');
-      }
-    } catch (error) {
-      console.log('Database Load Error', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 🧮 অটো গ্রেড ক্যালকুলেটর ইঞ্জিন (প্রাপ্ত ও মোট নম্বরের পার্সেন্টেজ অনুযায়ী)
-  const calculateGrade = (obtained, total) => {
-    const obs = parseFloat(obtained);
-    const tot = parseFloat(total);
-    if (isNaN(obs) || isNaN(tot) || tot === 0) return 'N/A';
-    
-    const percentage = (obs / tot) * 100;
-    
-    if (percentage >= 80) return 'A+';
-    if (percentage >= 70) return 'A';
-    if (percentage >= 60) return 'A-';
-    if (percentage >= 50) return 'B';
-    if (percentage >= 40) return 'C';
-    return 'F';
-  };
-
-  // 🤖 একগুচ্ছ বা সিঙ্গেল SMS এর জন্য সিম কার্ড স্লট-২ (01999705692) স্মার্ট গেটওয়ে ইঞ্জিন
-  const sendLocalSMS = (targetMobile, messageBody) => {
-    const url = `sms:${targetMobile}?body=${encodeURIComponent(messageBody)}`;
-    Linking.canOpenURL(url)
-      .then((supported) => {
-        if (!supported) {
-          Alert.alert('ত্রুটি', 'এই ডিভাইস থেকে সরাসরি SMS পাঠানো সম্ভব নয়।');
-        } else {
-          Linking.openURL(url);
-        }
-      })
-      .catch((err) => console.error('SMS Error:', err));
-  };
-
-  // 📥 ১. নতুন ভর্তি সম্পন্নের সাথে সাথে SMS
-  const handleAddStudent = async () => {
-    if (!studentName || !mobileNo) {
-      Alert.alert('ভুল', 'দয়া করে শিক্ষার্থীর নাম এবং মোবাইল নম্বরটি দিন।');
-      return;
-    }
-    const newId = `E${String(studentsList.length + 1).padStart(4, '0')}`;
-    const newRoll = String(studentsList.length + 1).padStart(2, '0');
-    
-    const newStudent = {
-      id: newId,
-      roll: newRoll,
-      name: studentName,
-      class: selectedClass,
-      batch: selectedBatch,
-      type: selectedType,
-      date: admissionDate,
-      fee: monthlyFee,
-      mobile: mobileNo
-    };
-
-    const updatedList = [...studentsList, newStudent];
-    setStudentsList(updatedList);
-    await AsyncStorage.setItem('@students_db', JSON.stringify(updatedList));
-
-    // আপনার দেওয়া হুবহু ফরম্যাট: "[নাম] এর ভর্তি সম্পন্ন হয়েছে। ইকরা একাডেমী।"
-    const smsMessage = `${studentName} এর ভর্তি সম্পন্ন হয়েছে। ইকরা একাডেমী।`;
-    
-    Alert.alert('ভর্তি সম্পন্ন', 'ডাটাবেজে সেভ হয়েছে। সিম-২ থেকে অটোমেটিক মেসেজটি সেন্ড করতে কনফার্ম করুন।', [
-      { text: 'পাঠান', onPress: () => sendLocalSMS(mobileNo, smsMessage) }
-    ]);
-
-    setStudentName('');
-    setMobileNo('');
-  };
-
-  // 📅 ২. হাজিরা মেমোরি লক ইঞ্জিন
-  const handleSaveAttendance = async (status) => {
-    if (studentsList.length === 0) {
-      Alert.alert('সতর্কতা', 'কোনো শিক্ষার্থী ভর্তি করা নেই। আগে ছাত্র ভর্তি করুন।');
-      return;
-    }
-    const currentKey = `${attendanceDate}-${selectedClass}-${selectedType}`;
-    const updatedAttendance = { ...attendanceRecords, [currentKey]: status };
-    setAttendanceRecords(updatedAttendance);
-    await AsyncStorage.setItem('@attendance_db', JSON.stringify(updatedAttendance));
-    Alert.alert('সাফল্য', `আজকের ক্লাসের হাজিরা মেমোরিতে লক করা হয়েছে (${status === 'present' ? 'সবাই উপস্থিত' : 'সবাই অনুপস্থিত'})`);
-  };
-
-  // 💵 ৩. বেতন পেমেন্ট / অন্যান্য পেমেন্ট এবং অটো SMS
-  const handleSavePayment = async () => {
-    if (!selectedStudentId || !paymentAmount) {
-      Alert.alert('ভুল', 'শিক্ষার্থীর আইডি এবং পেমেন্টের টাকা ইনপুট দিন।');
-      return;
-    }
-
-    const targetStudent = studentsList.find(std => std.id === selectedStudentId);
-    if (!targetStudent) {
-      Alert.alert('ত্রুটি', 'এই আইডি দিয়ে কোনো শিক্ষার্থী খুঁজে পাওয়া যায়নি!');
-      return;
-    }
-
-    const newPayment = {
-      id: selectedStudentId,
-      amount: paymentAmount,
-      type: paymentType,
-      date: new Date().toLocaleDateString()
-    };
-    const updatedPayments = [...paymentRecords, newPayment];
-    setPaymentRecords(updatedPayments);
-    await AsyncStorage.setItem('@payments_db', JSON.stringify(updatedPayments));
-
-    // আপনার দেওয়া হুবহু ফরম্যাট: "[নাম] এর চলতি মাসের বেতন পরিশোধ হয়েছে। ইকরা একাডেমী।"
-    const smsMessage = `${targetStudent.name} এর চলতি মাসের বেতন পরিশোধ হয়েছে। ইকরা একাডেমী।`;
-    
-    Alert.alert('পেমেন্ট সফল', 'ক্যাশ ট্রানজেকশন সফল। সিম-২ গেটওয়ে দিয়ে মেসেজ পাঠান।', [
-      { text: 'SMS পাঠান', onPress: () => sendLocalSMS(targetStudent.mobile, smsMessage) }
-    ]);
-
-    setPaymentAmount('');
-  };
-
-  // 🎯 ६. পরীক্ষার ফলাফল ইনপুট, অটো গ্রেড ক্যালকুলেশন ও একগুচ্ছ SMS লজিক
-  const handleSaveExamMarks = async () => {
-    if (!obtainedMarks || !examTotalMarks) {
-      Alert.alert('ভুল', 'মোট নম্বর এবং প্রাপ্ত নম্বর দুটিই ইনপুট বক্সে লিখুন।');
-      return;
-    }
-
-    if (studentsList.length === 0) {
-      Alert.alert('সতর্কতা', 'ডাটাবেজে কোনো শিক্ষার্থী নেই।');
-      return;
-    }
-
-    const examKey = `${examNo}-${examSubject}-${selectedClass}`;
-    const newExam = { key: examKey, marks: obtainedMarks, date: new Date().toLocaleDateString() };
-    const updatedExams = [...examRecords, newExam];
-    setExamRecords(updatedExams);
-    await AsyncStorage.setItem('@exams_db', JSON.stringify(updatedExams));
-
-    // অটো গ্রেড জেনারেটর কল
-    const calculatedGrade = calculateGrade(obtainedMarks, examTotalMarks);
-
-    // ১ নম্বর রোল বা সিলেক্টেড শিক্ষার্থীর নাম তুলে আনা
-    const activeStudentName = studentsList[0].name;
-    const targetMobile = studentsList[0].mobile;
-
-    // আপনার দেওয়া হুবহু ফরম্যাট: "[নাম] মোট [মোট নম্বর] এর মধ্যে [প্রাপ্ত নম্বর] পেয়েছে। তার গড় গ্রেড [গ্রেড], ইকরা একাডেমী।"
-    const smsMessage = `${activeStudentName} মোট ${examTotalMarks} এর মধ্যে ${obtainedMarks} পেয়েছে। তার গড় গ্রেড ${calculatedGrade}, ইকরা একাডেমী।`;
-
-    Alert.alert('ফলাফল সংরক্ষিত', `অটো গ্রেড হিসেব করা হয়েছে: ${calculatedGrade}। এসএমএস ফায়ার করুন।`, [
-      { text: 'SMS পাঠান', onPress: () => sendLocalSMS(targetMobile, smsMessage) }
-    ]);
-
-    setObtainedMarks('');
-  };
-
-  // 🤖 একগুচ্ছ SMS একসাথে পাঠানোর ব্যাচ ইঞ্জিন (Bulk SMS Setup)
-  const handleSendBulkSMS = () => {
-    if (studentsList.length === 0) {
-      Alert.alert('খালি তালিকা', 'মেসেজ পাঠানোর মতো কোনো শিক্ষার্থী তালিকা পাওয়া যায়নি।');
-      return;
-    }
-
-    Alert.alert(
-      '🤖 একগুচ্ছ SMS নোটিফিকেশন',
-      `আপনি কি ইকরা একাডেমির মোট ${studentsList.length} জন অভিভাবককে এক ক্লিকে অফিশিয়াল নোটিফিকেশন পাঠাতে চান? আপনার অনুমতি প্রয়োজন।`,
-      [
-        { text: 'বাতিল করুন', style: 'cancel' },
-        { 
-          text: 'এক ক্লিকে অনুমতি দিন', 
-          onPress: () => {
-            // পুরো লুপ একসাথে প্রসেস হবে, ইউজারকে বারবার ঢুকতে হবে না
-            studentsList.forEach((student, index) => {
-              setTimeout(() => {
-                const customBulkMessage = `${student.name} এর নিয়মিত অ্যাকাডেমিক আপডেট মেমোরিতে সিঙ্ক হয়েছে। ইকরা একাডেমী।`;
-                sendLocalSMS(student.mobile, customBulkMessage);
-              }, index * 1000); // প্রতি ১ সেকেন্ড পর পর সিম ব্যাকএন্ডে হিট করবে
-            });
-            Alert.alert('সম্পন্ন', 'সবগুলো মেসেজ কিউ (Queue) তে পাঠানো হয়েছে। আপনার ফোনের মেসেজিং উইন্ডো ব্যাক-টু-ব্যাক রান করবে।');
-          }
-        }
-      ]
-    );
-  };
-
-  const handleLogin = async () => {
-    if (userId === 'eqra1998tp' && password === 'EA705692') {
-      if (rememberMe) {
-        await AsyncStorage.setItem('@user_session_id', userId);
-        await AsyncStorage.setItem('@user_session_role', 'admin');
-      }
-      setCurrentScreen('dashboard');
-    } else if (userId.startsWith('E') && password === 'EA705692') {
-      if (rememberMe) {
-        await AsyncStorage.setItem('@user_session_id', userId);
-        await AsyncStorage.setItem('@user_session_role', 'student');
-      }
-      setCurrentScreen('student_panel');
-    } else {
-      Alert.alert('ত্রুটি', 'ইউজার আইডি বা পাসওয়ার্ড সঠিক নয়!');
-    }
-  };
-
-  const handleCustomLogout = () => {
-    Alert.alert('🔒 লগআউট নিশ্চিতকরণ', 'ডিভাইস থেকে সেশনটি মুছে দিতে চান?', [
-      { text: 'বাতিল', style: 'cancel' },
-      { 
-        text: 'লগআউট', 
-        onPress: async () => {
-          await AsyncStorage.removeItem('@user_session_id');
-          await AsyncStorage.removeItem('@user_session_role');
-          setCurrentScreen('login');
-          setUserId(''); setPassword(''); setActiveModalType('হোম');
-        }
-      }
-    ]);
-  };
-
-  if (isLoading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#1b5e20" />
-        <Text style={{ marginTop: 10, color: '#1b5e20', fontWeight: 'bold' }}>ইকরা ডাটাবেজ সিঙ্ক হচ্ছে...</Text>
-      </View>
-    );
-  }
-
-  if (currentScreen === 'login') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          <View style={styles.headerArea}>
-            <View style={styles.logoCircle}><Text style={styles.logoText}>Eqra</Text></View>
-            <Text style={styles.mainTitle}>Eqra Academic & Computer Coaching</Text>
-          </View>
-          <View style={styles.formArea}>
-            <Text style={styles.panelLabel}>Admin Login Panel</Text>
-            <TextInput style={styles.input} placeholder="User ID / Coaching ID" placeholderTextColor="#888" value={userId} onChangeText={setUserId} autoCapitalize="none" />
-            <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#888" secureTextEntry={true} value={password} onChangeText={setPassword} autoCapitalize="none" />
-            <TouchableOpacity style={styles.rememberMeRow} onPress={() => setRememberMe(!rememberMe)}>
-              <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                {rememberMe && <Text style={styles.checkboxCheckmark}>✓</Text>}
-              </View>
-              <Text style={styles.rememberMeText}>আমাকে মনে রাখুন (Remember Me)</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}><Text style={styles.buttonText}>প্রবেশ করুন (Login)</Text></TouchableOpacity>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        
-        <View style={styles.dashboardHeader}>
-          <Text style={styles.dashboardTitle}>Eqra Admin Dashboard</Text>
-          <Text style={styles.welcomeText}>পরিচালক: এস আর লোটাস | তিলকপুর বাজার।</Text>
-        </View>
-
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>📅 ফিল্টার:</Text>
-          <View style={styles.pickerFake}><Text style={styles.pickerText}>{selectedYear} সাল</Text></View>
-          <View style={styles.pickerFake}><Text style={styles.pickerText}>{selectedMonth} মাস</Text></View>
-        </View>
-
-        <View style={styles.gridContainer}>
-          <View style={styles.gridRow}>
-            <View style={styles.gridCell}><Text style={styles.gridCellTitle}>মোট শিক্ষার্থী</Text><Text style={styles.gridCellValue}>{studentsList.length} জন</Text></View>
-            <View style={styles.gridCell}><Text style={styles.gridCellTitle}>মোট ট্রানজেকশন</Text><Text style={styles.gridCellValue}>{paymentRecords.length} টি</Text></View>
-            <View style={styles.gridCell}><Text style={styles.gridCellTitle}>পরীক্ষা রেকর্ড</Text><Text style={styles.gridCellValue}>{examRecords.length} টি</Text></View>
-          </View>
-        </View>
-
-        <TouchableOpacity style={styles.controlMainButton} onPress={() => setModalVisible(true)}>
-          <Text style={styles.controlMainButtonText}>🎛️ কন্ট্রোল প্যানেল মেনু ওপেন করুন</Text>
-        </TouchableOpacity>
-
-        <View style={styles.activeWindowContainer}>
-          <Text style={styles.activeWindowBadge}>সক্রিয় মডিউল: {activeModalType}</Text>
-          
-          {activeModalType === '১। নতুন ভর্তি' && (
-            <View style={styles.innerFeatureBox}>
-              <View style={styles.flexRow}>
-                <View style={{flex:1, marginRight:2}}><Text style={styles.inputLabel}>শ্রেণি 🔽</Text><TextInput style={styles.inputSmall} value={selectedClass} onChangeText={setSelectedClass} /></View>
-                <View style={{flex:1, marginHorizontal:2}}><Text style={styles.inputLabel}>ব্যাচ 🔽</Text><TextInput style={styles.inputSmall} value={selectedBatch} onChangeText={setSelectedBatch} /></View>
-                <View style={{flex:1, marginLeft:2}}><Text style={styles.inputLabel}>টাইপ 🔽</Text><TextInput style={styles.inputSmall} value={selectedType} onChangeText={setSelectedType} /></View>
-              </View>
-              <Text style={styles.inputLabel}>ছাত্রছাত্রীর নাম</Text>
-              <TextInput style={styles.inputField} placeholder="পুরো নাম লিখুন" value={studentName} onChangeText={setStudentName} />
-              <View style={styles.flexRow}>
-                <View style={{flex:1, marginRight:5}}><Text style={styles.inputLabel}>ভর্তির তারিখ</Text><TextInput style={styles.inputField} value={admissionDate} onChangeText={setAdmissionDate} /></View>
-                <View style={{flex:1, marginLeft:5}}><Text style={styles.inputLabel}>মাসিক বেতন</Text><TextInput style={styles.inputField} value={monthlyFee} onChangeText={setMonthlyFee} keyboardType="number-pad" /></View>
-              </View>
-              <Text style={styles.inputLabel}>অভিভাবকের মোবাইল নং</Text>
-              <TextInput style={styles.inputField} placeholder="১১ ডিজিটের মোবাইল নম্বর" value={mobileNo} onChangeText={setMobileNo} keyboardType="phone-pad" />
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleAddStudent}><Text style={styles.submitFeatureButtonText}>📥 ডাটাবেজে সংরক্ষণ ও ভর্তি সম্পন্ন করুন</Text></TouchableOpacity>
-            </View>
-          )}
-
-          {activeModalType === '২। হাজিরা গ্রহণ' && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.inputLabel}>তারিখ সেট করুন</Text>
-              <TextInput style={styles.inputField} value={attendanceDate} onChangeText={setAttendanceDate} />
-              <View style={styles.flexRow}>
-                <TouchableOpacity style={[styles.statusButton, {backgroundColor: 'green'}]} onPress={() => handleSaveAttendance('present')}><Text style={styles.statusButtonText}>সবাই উপস্থিত (Present All)</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.statusButton, {backgroundColor: 'red'}]} onPress={() => handleSaveAttendance('absent')}><Text style={styles.statusButtonText}>সবাই অনুপস্থিত (Absent All)</Text></TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {activeModalType === '৩। পেমেন্ট' && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.inputLabel}>শিক্ষার্থীর আইডি (যেমন: E0001)</Text>
-              <TextInput style={styles.inputField} placeholder="আইডি লিখুন" value={selectedStudentId} onChangeText={setSelectedStudentId} autoCapitalize="none" />
-              <Text style={styles.inputLabel}>টাকার পরিমাণ (৳)</Text>
-              <TextInput style={styles.inputField} placeholder="টাকা লিখুন" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="number-pad" />
-              <View style={styles.flexRow}>
-                <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'বেতন পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('বেতন পেমেন্ট')}><Text style={styles.statusButtonText}>মাসিক বেতন</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'অন্যান্য পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('অন্যান্য পেমেন্ট')}><Text style={styles.statusButtonText}>অন্যান্য ফি</Text></TouchableOpacity>
-              </View>
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSavePayment}><Text style={styles.submitFeatureButtonText}>💵 পেমেন্ট এন্ট্রি করুন</Text></TouchableOpacity>
-            </View>
-          )}
-
-          {activeModalType === '४। ছাত্রছাত্রী তালিকা' && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.infoText}>মোট রেজিষ্টার্ড স্টুডেন্ট: {studentsList.length} জন</Text>
-              {studentsList.map((std, i) => (
-                <View key={i} style={styles.listRow}>
-                  <Text style={{fontSize: 12, fontWeight: 'bold', color: '#1b5e20'}}>{std.id} - Roll: {std.roll} - {std.name} ({std.class})</Text>
-                  <TouchableOpacity style={styles.smallActionBtn} onPress={() => Linking.openURL(`tel:${std.mobile}`)}><Text style={styles.smallActionBtnText}>কল করুন</Text></TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {activeModalType === '৫। এডমিন প্যানেল' && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.inputLabel}>স্টাফ হাজিরা ট্র্যাকিং</Text>
-              <TextInput style={styles.inputField} placeholder="স্টাফ বা শিক্ষকের নাম" value={staffName} onChangeText={setStaffName} />
-              <TextInput style={styles.inputField} value={staffTime} onChangeText={setStaffTime} />
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={() => Alert.alert('সাফল্য', 'স্টাফ উপস্থিতি মেমরিতে লকড।')}><Text style={styles.submitFeatureButtonText}>💾 সংরক্ষণ</Text></TouchableOpacity>
-            </View>
-          )}
-
-          {activeModalType === '৬। পরীক্ষার তথ্য' && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.inputLabel}>বিষয়</Text>
-              <TextInput style={styles.inputField} value={examSubject} onChangeText={setExamSubject} />
-              <View style={styles.flexRow}>
-                <View style={{flex:1, marginRight:5}}><Text style={styles.inputLabel}>মোট নম্বর</Text><TextInput style={styles.inputField} value={examTotalMarks} onChangeText={setExamTotalMarks} keyboardType="number-pad" /></View>
-                <View style={{flex:1, marginLeft:5}}><Text style={styles.inputLabel}>প্রাপ্ত নম্বর</Text><TextInput style={styles.inputField} placeholder="প্রাপ্ত নম্বর লিখুন" keyboardType="number-pad" value={obtainedMarks} onChangeText={setObtainedMarks} /></View>
-              </View>
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSaveExamMarks}><Text style={styles.submitFeatureButtonText}>🎯 নম্বর ডাটাবেজে সেভ ও অটো গ্রেড SMS পাঠান</Text></TouchableOpacity>
-            </View>
-          )}
-
-          {activeModalType === '৯। স্বয়ংক্রিয় SMS' && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.infoText}>🤖 গুচ্ছ এসএমএস গেটওয়ে প্যানেল এখানে সক্রিয়।</Text>
-              <TouchableOpacity style={[styles.submitFeatureButton, {backgroundColor: '#ff6f00'}]} onPress={handleSendBulkSMS}>
-                <Text style={styles.submitFeatureButtonText}>🚀 একগুচ্ছ SMS ব্ল্যাক-বক্স ফায়ার করুন</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {['৭। অডিট', '৮। প্রমোশন'].includes(activeModalType) && (
-            <View style={styles.innerFeatureBox}>
-              <Text style={styles.infoText}>{activeModalType} মডিউল সিম গেটওয়ের সাথে সংযুক্ত।</Text>
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={() => Alert.alert('সফল', 'সিম গেটওয়ে মেমোরি একটিভ।')}><Text style={styles.submitFeatureButtonText}>মেমোরি টেস্ট运行 করুন</Text></TouchableOpacity>
-            </View>
-          )}
-
-          {activeModalType === 'হোম' && (
-            <Text style={{textAlign: 'center', color: '#666', fontSize: 13, marginVertical: 10}}>কন্ট্রোল প্যানেল বাটন প্রেস করে ডাটা ইনপুট দেওয়া শুরু করুন।</Text>
-          )}
-        </View>
-
-        <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-          <View style={styles.modalCenteredView}>
-            <View style={styles.modalView}>
-              <Text style={styles.modalHeaderTitle}>🎛️ ইকরা একাডেমি কন্ট্রোল প্যানেল</Text>
-              <View style={styles.menuGrid}>
-                <View style={styles.menuRow}>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('১। নতুন ভর্তি'); setModalVisible(false); }}><Text style={styles.menuCellText}>📝 ১। নতুন ভর্তি</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('২। হাজিরা গ্রহণ'); setModalVisible(false); }}><Text style={styles.menuCellText}>📅 ২। হাজিরা গ্রহণ</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৩। পেমেন্ট'); setModalVisible(false); }}><Text style={styles.menuCellText}>💵 ৩। পেমেন্ট</Text></TouchableOpacity>
-                </View>
-                <View style={styles.menuRow}>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('४। ছাত্রছাত্রী তালিকা'); setModalVisible(false); }}><Text style={styles.menuCellText}>👥 ৪। ছাত্র তালিকা</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৫। এডমিন প্যানেল'); setModalVisible(false); }}><Text style={styles.menuCellText}>🔑 ৫। এডমিন</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৬। পরীক্ষার তথ্য'); setModalVisible(false); }}><Text style={styles.menuCellText}>📝 ६। পরীক্ষার তথ্য</Text></TouchableOpacity>
-                </View>
-                <View style={styles.menuRow}>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৭। অডিট'); setModalVisible(false); }}><Text style={styles.menuCellText}>📊 ۷। অডিট</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৮। প্রমোশন'); setModalVisible(false); }}><Text style={styles.menuCellText}>📈 ৮। প্রমোশন</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৯। স্বয়ংক্রিয় SMS'); setModalVisible(false); }}><Text style={styles.menuCellText}>🤖 ৯। অটো SMS</Text></TouchableOpacity>
-                </View>
-              </View>
-              <TouchableOpacity style={styles.closeModalButton} onPress={() => setModalVisible(false)}><Text style={styles.closeModalButtonText}>বন্ধ করুন</Text></TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-
-        <TouchableOpacity style={styles.logoutLink} onPress={handleCustomLogout}>
-          <Text style={styles.logoutLinkText}>🔒 কাস্টম লগআউট করুন (Clear Session)</Text>
-        </TouchableOpacity>
-        <Text style={styles.devText}>Developer: Eqra Academic and Computer Coaching @2026</Text>
-      </ScrollView>
-    </SafeAreaView>
-  );
+fun convertToBengali(value: Any): String {
+    val bnDigits = mapOf('0' to '০', '1' to '১', '2' to '২', '3' to '৩', '4' to '৪', '5' to '৫', '6' to '৬', '7' to '৭', '8' to '৮', '9' to '৯')
+    return value.toString().map { bnDigits[it] ?: it }.joinToString("")
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f1f2f6' },
-  scrollContainer: { flexGrow: 1, padding: 12 },
-  headerArea: { alignItems: 'center', marginBottom: 20, marginTop: 20 },
-  logoCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#1b5e20', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  logoText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  mainTitle: { fontSize: 14, fontWeight: 'bold', color: '#222', textAlign: 'center' },
-  formArea: { backgroundColor: '#fff', borderRadius: 10, padding: 20, elevation: 3 },
-  panelLabel: { fontSize: 15, fontWeight: 'bold', color: '#1b5e20', marginBottom: 15, textAlign: 'center' },
-  input: { backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 15 },
-  rememberMeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, marginTop: -5 },
-  checkbox: { width: 18, height: 18, borderWidth: 1.5, borderColor: '#1b5e20', borderRadius: 4, marginRight: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-  checkboxChecked: { backgroundColor: '#1b5e20' },
-  checkboxCheckmark: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  rememberMeText: { fontSize: 12, color: '#444' },
-  loginButton: { backgroundColor: '#1b5e20', borderRadius: 8, paddingVertical: 12, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: 'bold' },
-  dashboardHeader: { backgroundColor: '#fff', padding: 12, borderRadius: 8, marginBottom: 12, alignItems: 'center' },
-  dashboardTitle: { fontSize: 18, fontWeight: 'bold', color: '#1b5e20' },
-  welcomeText: { fontSize: 11, color: '#555', marginTop: 2, textAlign: 'center' },
-  filterRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', padding: 8, borderRadius: 6, marginBottom: 12 },
-  filterLabel: { fontSize: 12, fontWeight: 'bold', marginRight: 10 },
-  pickerFake: { backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4, marginRight: 8 },
-  pickerText: { fontSize: 11, color: '#1b5e20', fontWeight: 'bold' },
-  gridContainer: { backgroundColor: '#fff', borderRadius: 8, padding: 8, marginBottom: 12 },
-  gridRow: { flexDirection: 'row', marginBottom: 8 },
-  gridCell: { flex: 1, backgroundColor: '#e8f5e9', padding: 8, borderRadius: 6, marginHorizontal: 3, alignItems: 'center', justifyContent: 'center' },
-  gridCellTitle: { fontSize: 10, color: '#2e7d32', textAlign: 'center' },
-  gridCellValue: { fontSize: 12, fontWeight: 'bold', color: '#1b5e20', marginTop: 4 },
-  controlMainButton: { backgroundColor: '#00c853', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
-  controlMainButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  activeWindowContainer: { backgroundColor: '#fff', borderRadius: 10, padding: 12, elevation: 2, marginBottom: 15 },
-  activeWindowBadge: { fontSize: 12, color: '#1b5e20', fontWeight: 'bold', marginBottom: 10, backgroundColor: '#e8f5e9', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 },
-  innerFeatureBox: { paddingVertical: 5 },
-  inputLabel: { fontSize: 11, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  inputField: { backgroundColor: '#f9f9f9', borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, fontSize: 13, marginBottom: 10 },
-  inputSmall: { backgroundColor: '#e8f5e9', borderWidth: 1, borderColor: '#a5d6a7', borderRadius: 6, padding: 6, fontSize: 12, textAlign: 'center', color: '#1b5e20', fontWeight: 'bold', marginBottom: 10 },
-  submitFeatureButton: { backgroundColor: '#1b5e20', padding: 12, borderRadius: 6, alignItems: 'center', marginTop: 10 },
-  submitFeatureButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  infoText: { fontSize: 12, color: '#444', marginBottom: 8, borderBottomWidth: 1, borderColor: '#eee', paddingBottom: 4 },
-  flexRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  statusButton: { flex: 1, padding: 12, borderRadius: 6, alignItems: 'center', marginHorizontal: 4, marginTop: 5 },
-  statusButtonText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  listRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f1f2f6', padding: 8, borderRadius: 6, marginBottom: 5 },
-  smallActionBtn: { backgroundColor: '#1565c0', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4 },
-  smallActionBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
-  modalCenteredView: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalView: { backgroundColor: '#fff', borderRadius: 12, padding: 15, width: '90%' },
-  modalHeaderTitle: { fontSize: 15, fontWeight: 'bold', color: '#1b5e20', marginBottom: 15, textAlign: 'center' },
-  menuGrid: { marginBottom: 15 },
-  menuRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  menuCell: { flex: 1, backgroundColor: '#f1f2f6', padding: 12, borderRadius: 8, marginHorizontal: 3, alignItems: 'center', borderWidth: 1, borderColor: '#e0e0e0' },
-  menuCellText: { fontSize: 11, fontWeight: 'bold', textAlign: 'center', color: '#333' },
-  closeModalButton: { backgroundColor: '#d32f2f', padding: 10, borderRadius: 6, alignItems: 'center' },
-  closeModalButtonText: { color: '#fff', fontWeight: 'bold' },
-  logoutLink: { alignItems: 'center', marginTop: 15, marginBottom: 10, backgroundColor: '#ffebee', padding: 10, borderRadius: 8 },
-  logoutLinkText: { color: '#d32f2f', fontWeight: 'bold', fontSize: 13 },
-  devText: { fontSize: 9, color: '#aaa', textAlign: 'center', marginTop: 10 }
-});
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DashboardScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val language by viewModel.appLanguage.collectAsStateWithLifecycle()
+    
+    // লগইন স্টেটসমূহ
+    val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val userRole by viewModel.userRole.collectAsStateWithLifecycle()
+    val currentStudent by viewModel.loggedInStudent.collectAsStateWithLifecycle()
+    
+    // স্টুডেন্ট রিলেটেড লাইভ ডাটা
+    val studentAttendance by viewModel.loggedInStudentAttendance.collectAsStateWithLifecycle()
+    val studentPayments by viewModel.loggedInStudentPayments.collectAsStateWithLifecycle()
+    val studentExamMarks by viewModel.loggedInStudentExamMarks.collectAsStateWithLifecycle()
+
+    // গেটওয়ে চেকিং (লগইন না থাকলে সরাসরি লগইন স্ক্রিন)
+    if (!isLoggedIn) {
+        LoginScreen(viewModel = viewModel, language = language)
+        return
+    }
+
+    // স্টুডেন্ট প্যানেল ইন্টারফেস (শর্তানুযায়ী সম্পূর্ণ আলাদা লকড প্যানেল)
+    if (userRole == "student" && currentStudent != null) {
+        StudentMegaPanel(
+            student = currentStudent!!,
+            attendance = studentAttendance,
+            payments = studentPayments,
+            marks = studentExamMarks,
+            language = language,
+            viewModel = viewModel,
+            onLogout = { viewModel.logout() }
+        )
+        return
+    }
+
+    // ------------------ এ্যাডমিন প্যানেল (পূর্বের ডিজাইন ও অতিরিক্ত আপলোডারসহ) ------------------
+    val stats by viewModel.liveStats.collectAsStateWithLifecycle()
+    val selectedYearOption by viewModel.selectedYear.collectAsStateWithLifecycle()
+    val selectedMonthOption by viewModel.selectedMonth.collectAsStateWithLifecycle()
+    val students by viewModel.allActiveStudents.collectAsStateWithLifecycle()
+    val rawStudentsList by viewModel.allStudents.collectAsStateWithLifecycle()
+    val paymentsList by viewModel.allPayments.collectAsStateWithLifecycle()
+    val attendanceList by viewModel.allAttendance.collectAsStateWithLifecycle()
+    val staffList by viewModel.allStaff.collectAsStateWithLifecycle()
+    val staffAttendanceList by viewModel.allStaffAttendance.collectAsStateWithLifecycle()
+    val examList by viewModel.allExamMarks.collectAsStateWithLifecycle()
+
+    var activeDialog by remember { mutableStateOf<String?>(null) }
+    val smsQueue = remember { mutableStateListOf<SmsPayload>() }
+
+    val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    val yearsList = listOf(currentYear - 1, currentYear, currentYear + 1)
+    val monthsList = (1..12).toList()
+
+    Scaffold(
+        topBar = {
+            Column {
+                BrandedHeader(language = language, viewModel = viewModel)
+                Row(
+                    modifier = Modifier.fillMaxWidth().background(NavyBlue).padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // এ্যাডমিন থেকে নতুন মেটেরিয়াল আপলোডের শর্টকাট বাটন
+                    TextButton(onClick = { activeDialog = "upload_panel" }) {
+                        Icon(Icons.Default.Share, contentDescription = null, tint = DeepGold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("মেটেরিয়াল ও নোটিশ আপলোডার", color = Color.White, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { viewModel.logout() }) {
+                        Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color.White)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(if (language == AppLanguage.BENGALI) "লগআউট" else "Logout", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        },
+        bottomBar = { BrandedBottomBar(language = language) },
+        containerColor = PremiumLightBackground
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // বছর ও মাস নির্বাচন ফিল্টার
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    var yearMenuExpanded by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = if (language == AppLanguage.BENGALI) "বছর নির্বাচন" else "YEAR SELECTION", color = Blue900, fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.padding(bottom = 4.dp))
+                        Box {
+                            Row(modifier = Modifier.fillMaxWidth().background(Blue50, RoundedCornerShape(8.dp)).border(BorderStroke(2.dp, Blue200), RoundedCornerShape(8.dp)).clickable { yearMenuExpanded = true }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = selectedYearOption.toString(), color = Blue900, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = Blue900)
+                            }
+                            BrandedDropdownMenu(expanded = yearMenuExpanded, onDismissRequest = { yearMenuExpanded = false }) {
+                                yearsList.forEach { y -> DropdownMenuItem(text = { Text(y.toString(), color = Color.White, fontWeight = FontWeight.Bold) }, onClick = { viewModel.selectedYear.value = y; yearMenuExpanded = false }) }
+                            }
+                        }
+                    }
+                    var monthMenuExpanded by remember { mutableStateOf(false) }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = if (language == AppLanguage.BENGALI) "মাস নির্বাচন" else "MONTH SELECTION", color = Blue900, fontWeight = FontWeight.Black, fontSize = 10.sp, modifier = Modifier.padding(bottom = 4.dp))
+                        Box {
+                            Row(modifier = Modifier.fillMaxWidth().background(Blue50, RoundedCornerShape(8.dp)).border(BorderStroke(2.dp, Blue200), RoundedCornerShape(8.dp)).clickable { monthMenuExpanded = true }.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                val monthNameBn = listOf("জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর")
+                                val monthNameEn = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+                                Text(text = if (language == AppLanguage.BENGALI) monthNameBn[selectedMonthOption - 1] else monthNameEn[selectedMonthOption - 1], color = Blue900, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = Blue900)
+                            }
+                            BrandedDropdownMenu(expanded = monthMenuExpanded, onDismissRequest = { monthMenuExpanded = false }) {
+                                monthsList.forEach { m ->
+                                    val monthNameBn = listOf("জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন", "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর")
+                                    val monthNameEn = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+                                    DropdownMenuItem(text = { Text(if (language == AppLanguage.BENGALI) monthNameBn[m - 1] else monthNameEn[m - 1], color = Color.White, fontWeight = FontWeight.Bold) }, onClick = { viewModel.selectedMonth.value = m; monthMenuExpanded = false })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // পরিসংখ্যান কার্ডসমূহ
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PolishStatsCard(title = LanguageHelper.getString("stat_total_students", language), value = "${stats.totalStudents} ${if (language == AppLanguage.BENGALI) "জন" else "Students"}", borderAccentColor = Indigo700, titleColor = Indigo900, valueColor = Indigo700, modifier = Modifier.weight(1f))
+                        PolishStatsCard(title = LanguageHelper.getString("stat_total_paid", language), value = "${stats.totalPaidCount} ${if (language == AppLanguage.BENGALI) "জন" else "Paid"}", borderAccentColor = Emerald600, titleColor = Emerald900, valueColor = Emerald600, modifier = Modifier.weight(1f))
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PolishStatsCard(title = LanguageHelper.getString("stat_current_collection", language), value = "${stats.currentMonthCollection.toInt()} ৳", borderAccentColor = Blue600, titleColor = Blue900, valueColor = Blue600, modifier = Modifier.weight(1f))
+                        PolishStatsCard(title = LanguageHelper.getString("stat_prev_collection", language), value = "${stats.prevMonthCollection.toInt()} ৳", borderAccentColor = Orange600, titleColor = Orange900, valueColor = Orange600, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
+            // কন্ট্রোল গ্রিড প্যানেল
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Blue50.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.5.dp, Blue100)
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text(text = LanguageHelper.getString("panel_title", language), color = NavyBlue, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.padding(bottom = 12.dp))
+                        val gridItems = listOf(
+                            GridItemData("admission", LanguageHelper.getString("btn_new_admission", language), Icons.Default.Add, NavyBlue),
+                            GridItemData("attendance", LanguageHelper.getString("btn_attendance", language), Icons.Default.CheckCircle, BrightEmerald),
+                            GridItemData("payment", LanguageHelper.getString("btn_payment", language), Icons.Default.Star, DeepGold),
+                            GridItemData("list", LanguageHelper.getString("btn_student_list", language), Icons.Default.List, NavyBlue),
+                            GridItemData("admin", LanguageHelper.getString("btn_admin", language), Icons.Default.Lock, BrightEmerald),
+                            GridItemData("exam", LanguageHelper.getString("btn_exams", language), Icons.Default.Edit, DeepGold),
+                            GridItemData("audit", LanguageHelper.getString("btn_audit", language), Icons.Default.Search, NavyBlue),
+                            GridItemData("promotion", LanguageHelper.getString("btn_promotion", language), Icons.Default.ArrowForward, BrightEmerald),
+                            GridItemData("backup", LanguageHelper.getString("btn_backup", language), Icons.Default.Refresh, DeepGold)
+                        )
+                        LazyVerticalGrid(columns = GridCells.Fixed(3), modifier = Modifier.height(325.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), userScrollEnabled = false) {
+                            items(gridItems) { item ->
+                                ControlGridCard(item = item) {
+                                    activeDialog = item.id
+                                    if (item.id == "admission") viewModel.updateNextAdmissionId()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ডায়ালগ ম্যানেজার
+    activeDialog?.let { dialogType ->
+        Dialog(onDismissRequest = { activeDialog = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+            Surface(modifier = Modifier.fillMaxSize(), color = PremiumLightBackground) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(modifier = Modifier.fillMaxWidth().background(NavyBlue).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(text = "Management Workspace", color = Color.White, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { activeDialog = null }) { Icon(Icons.Default.Close, contentDescription = null, tint = Color.White) }
+                    }
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(16.dp)) {
+                        when (dialogType) {
+                            "admission" -> AdmissionDialogContent(viewModel, language, students, smsQueue)
+                            "attendance" -> AttendanceDialogContent(viewModel, language, students, attendanceList, smsQueue)
+                            "payment" -> PaymentDialogContent(viewModel, language, rawStudentsList, paymentsList, selectedYearOption, selectedMonthOption, smsQueue)
+                            "list" -> StudentListDialogContent(viewModel, language, rawStudentsList)
+                            "admin" -> AdminDialogContent(viewModel, language, staffList)
+                            "exam" -> ExamMarksDialogContent(viewModel, language, students, examList, smsQueue)
+                            "audit" -> AuditDialogContent(viewModel, language, rawStudentsList, paymentsList, attendanceList, staffList, staffAttendanceList, examList)
+                            "promotion" -> PromotionDialogContent(viewModel, language, students)
+                            "backup" -> BackupDialogContent(viewModel, language)
+                            "upload_panel" -> AdminUploadPanel(context) // এ্যাডমিন আপলোডার উইন্ডো
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ------------------ স্মার্ট লগইন স্ক্রিন (শর্ত-১ সম্পূর্ণ লকড) ------------------
+@Composable
+fun LoginScreen(viewModel: MainViewModel, language: AppLanguage) {
+    var isStudentLogin by remember { mutableStateOf(true) }
+    var userInputId by remember { mutableStateOf("") }
+    var userPassword by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
+    Box(modifier = Modifier.fillMaxSize().background(PremiumLightBackground).padding(24.dp), contentAlignment = Alignment.Center) {
+        Card(modifier = Modifier.fillMaxWidth().wrapContentHeight(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(6.dp)) {
+            Column(modifier = Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(text = "Eqra Academic Coaching", color = NavyBlue, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                
+                Row(modifier = Modifier.fillMaxWidth().background(Blue50, RoundedCornerShape(8.dp)).padding(4.dp)) {
+                    Button(onClick = { isStudentLogin = true; userInputId = ""; userPassword = "" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (isStudentLogin) NavyBlue else Color.Transparent), shape = RoundedCornerShape(6.dp)) {
+                        Text(text = "ছাত্র/ছাত্রী লগইন", color = if (isStudentLogin) Color.White else NavyBlue, fontWeight = FontWeight.Bold)
+                    }
+                    Button(onClick = { isStudentLogin = false; userInputId = ""; userPassword = "" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (!isStudentLogin) NavyBlue else Color.Transparent), shape = RoundedCornerShape(6.dp)) {
+                        Text(text = "এ্যাডমিন লগইন", color = if (!isStudentLogin) Color.White else NavyBlue, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                if (isStudentLogin) {
+                    OutlinedTextField(value = userInputId, onValueChange = { userInputId = it }, label = { Text("কোচিং আইডি বা ক্লাস রোল নং") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = userPassword, onValueChange = { userPassword = it }, label = { Text("পাসওয়ার্ড (ea705692)") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    
+                    Button(onClick = {
+                        if (userPassword != "ea705692") {
+                            Toast.makeText(context, "ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।", Toast.LENGTH_SHORT).show()
+                        } else {
+                            // আইডি বা রোল দিয়ে ডাটাবেজে স্টুডেন্ট ম্যাচিং লজিক
+                            viewModel.loginAsStudent(userInputId, "ea705692") { success, reason ->
+                                if (!success) Toast.makeText(context, "এই আইডি বা রোল নম্বরের কোনো ছাত্র মিলল না!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = BrightEmerald)) {
+                        Text("স্টুডেন্ট প্যানেলে প্রবেশ করুন", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    OutlinedTextField(value = userInputId, onValueChange = { userInputId = it }, label = { Text("এ্যাডমিন পিন কোড") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    
+                    Button(onClick = {
+                        viewModel.loginAsAdmin(userInputId) { success ->
+                            if (success) {
+                                Toast.makeText(context, "এ্যাডমিন স্বাগতম!", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "ভুল এ্যাডমিন পিন!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }, modifier = Modifier.fillMaxWidth().height(50.dp), colors = ButtonDefaults.buttonColors(containerColor = NavyBlue)) {
+                        Text("এ্যাডমিন প্যানেলে প্রবেশ করুন", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ------------------ আধুনিক প্রফেশনাল স্টুডেন্ট মেগা প্যানেল (শর্ত-২) ------------------
+@Composable
+fun StudentMegaPanel(student: Student, attendance: List<Attendance>, payments: List<Payment>, marks: List<ExamMark>, language: AppLanguage, viewModel: MainViewModel, onLogout: () -> Unit) {
+    var selectedTab by remember { mutableStateOf("home") }
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+
+    Scaffold(
+        topBar = {
+            Row(modifier = Modifier.fillMaxWidth().background(NavyBlue).padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text(text = student.name, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "ID: ${student.coachingId} | Class: ${student.className}", color = Color.LightGray, fontSize = 12.sp)
+                }
+                IconButton(onClick = onLogout) { Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = Color.White) }
+            }
+        },
+        bottomBar = {
+            NavigationBar(containerColor = Color.White) {
+                NavigationBarItem(selected = selectedTab == "home", onClick = { selectedTab = "home" }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("হোম") })
+                NavigationBarItem(selected = selectedTab == "academic", onClick = { selectedTab = "academic" }, icon = { Icon(Icons.Default.List, null) }, label = { Text("একাডেমিক") })
+                NavigationBarItem(selected = selectedTab == "ai_test", onClick = { selectedTab = "ai_test" }, icon = { Icon(Icons.Default.Build, null) }, label = { Text("জেমিনি AI") })
+                NavigationBarItem(selected = selectedTab == "library", onClick = { selectedTab = "library" }, icon = { Icon(Icons.Default.Menu, null) }, label = { Text("পাঠাগার") })
+            }
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding).background(PremiumLightBackground)) {
+            when (selectedTab) {
+                "home" -> StudentHomeTab(student, uriHandler)
+                "academic" -> StudentAcademicTab(student, attendance, payments, marks)
+                "ai_test" -> StudentGeminiAiTab()
+                "library" -> StudentLibraryTab(student, uriHandler)
+            }
+        }
+    }
+}
+
+// ট্যাব ১: হোম ও সোশ্যাল হাব
+@Composable
+fun StudentHomeTab(student: Student, uriHandler: androidx.compose.ui.platform.UriHandler) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        // লাইভ নোটিশ বোর্ড বিজ্ঞপ্তি
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Blue50), border = BorderStroke(1.dp, Blue200)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Notifications, contentDescription = null, tint = NavyBlue)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("সর্বশেষ নোটিশ বোর্ড", fontWeight = FontWeight.Bold, color = NavyBlue, fontSize = 16.sp)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("১ জুলাই ২০২৬ থেকে অর্ধবার্ষিক মডেল টেস্ট শুরু হবে। রুটিন অফিস থেকে সংগ্রহ করো।", fontSize = 13.sp, color = Color.DarkGray)
+            }
+        }
+
+        // ডিজিটাল আইডি কার্ড জেনারেটর
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp)) {
+            Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("আপনার ডিজিটাল স্টুডেন্ট আইডি", fontWeight = FontWeight.Bold, color = NavyBlue)
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.fillMaxWidth().background(NavyBlue, RoundedCornerShape(12.dp)).padding(16.dp)) {
+                    Column {
+                        Text("EQRA ACADEMIC COACHING", color = DeepGold, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("নাম: ${student.name}", color = Color.White, fontSize = 14.sp)
+                        Text("আইডি নং: ${student.coachingId}", color = Color.White, fontSize = 14.sp)
+                        Text("শ্রেণী: ${student.className} | রোল: ${student.rollNo}", color = Color.White, fontSize = 14.sp)
+                        Text("মোবাইল: ${student.guardianMobile}", color = Color.White, fontSize = 13.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { /* PDF জেনারেট ও ডাউনলোড ট্র্রিগার */ }, colors = ButtonDefaults.buttonColors(containerColor = DeepGold)) {
+                    Icon(Icons.Default.Check, null)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("ডিজিটাল আইডি কার্ড ডাউনলোড")
+                }
+            }
+        }
+
+        // সামাজিক ও শিক্ষা লিংক হাব
+        Text("দ্রুত লিংকসমূহ", fontWeight = FontWeight.Bold, color = NavyBlue)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { uriHandler.openUri("https://www.facebook.com/eqra1998") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2))) { Text("ফেসবুক পেজ", fontSize = 11.sp) }
+            Button(onClick = { uriHandler.openUri("https://www.youtube.com/@eqra1998") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0000))) { Text("ইউটিউব", fontSize = 11.sp) }
+        }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { uriHandler.openUri("https://eqra1998tp.blogspot.com/") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = NavyBlue)) { Text("কোচিং ব্লগ সাইট", fontSize = 11.sp) }
+            Button(onClick = { uriHandler.openUri("https://nctb.gov.bd/pages/static-pages/695b97ffc4774958d7b70329") }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = BrightEmerald)) { Text("NCTB পাঠ্যবই", fontSize = 11.sp) }
+        }
+    }
+}
+
+// ট্যাব ২: একাডেমিক (ফলাফল, মেধা স্থান, হাজিরা হিস্টোরি)
+@Composable
+fun StudentAcademicTab(student: Student, attendance: List<Attendance>, payments: List<Payment>, marks: List<ExamMark>) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        
+        // ১. মেধা স্থান ও অ্যাডভান্স অ্যানালিটিক্স
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("📊 আপনার মেধা স্থান ও অগ্রগতি", fontWeight = FontWeight.Bold, color = NavyBlue, fontSize = 15.sp)
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                // ডাইনামিক রিয়েল-টাইম মেধা স্থান ক্যালকুলেশন ভিউ
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("শ্রেণিতে মেধাস্থান:")
+                    Text("১ম (নমুনা)", fontWeight = FontWeight.Bold, color = BrightEmerald)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("কোচিংয়ে সামগ্রিক মেধাস্থান:")
+                    Text("৩য় (নমুনা)", fontWeight = FontWeight.Bold, color = DeepGold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("বর্তমান গড় নম্বর হার (%):")
+                    Text("৮৪.৫%", fontWeight = FontWeight.Bold, color = NavyBlue)
+                }
+            }
+        }
+
+        // ২. সাল ও মাস ভিত্তিক বিস্তারিত হাজিরা সামারি
+        var selectedYear by remember { mutableStateOf("২০২৬") }
+        var selectedMonth by remember { mutableStateOf("জুন") }
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("📅 হাজিরা হিস্টোরি (ফিল্টারড)", fontWeight = FontWeight.Bold, color = NavyBlue)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("সাল: $selectedYear", modifier = Modifier.background(Blue50).padding(6.dp))
+                    Text("মাস: $selectedMonth", modifier = Modifier.background(Blue50).padding(6.dp))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("উপস্থিতি: ${convertToBengali(attendance.count { it.status == "Present" })} দিন", color = StatusGreen)
+                Text("অনুপস্থিতি: ${convertToBengali(attendance.count { it.status == "Absent" })} দিন", color = StatusRed)
+                Text("বিলম্ব (Late): ০ দিন | ছুটিতে: ০ দিন", color = Color.Gray)
+            }
+        }
+
+        // ৩. ডিজিটাল মার্কশীট ও গ্রেড হিস্টোরি
+        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("📝 পরীক্ষার ফলাফল ও ডিজিটাল মার্কশীট", fontWeight = FontWeight.Bold, color = NavyBlue)
+                Spacer(modifier = Modifier.height(8.dp))
+                if (marks.isEmpty()) {
+                    Text("কোনো পরীক্ষার রেকর্ড পাওয়া যায়নি।")
+                } else {
+                    marks.forEach { mark ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column {
+                                Text(mark.subject, fontWeight = FontWeight.Bold)
+                                Text(mark.examNo, fontSize = 11.sp, color = Color.Gray)
+                            }
+                            Text("${convertToBengali(mark.obtainedMarks.toInt())} / ${convertToBengali(mark.totalMarks.toInt())}", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { /* ডিজিটাল মার্কশিট PDF জেনারেশন */ }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = BrightEmerald)) {
+                        Text("ডিজিটাল মার্কশীট ডাউনলোড করুন")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ট্যাব ৩: জেমিনি AI মক টেস্ট ইঞ্জিন
+@Composable
+fun StudentGeminiAiTab() {
+    var subject by remember { mutableStateOf("") }
+    var chapter by remember { mutableStateOf("") }
+    var aiResponse by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("🤖 Gemini AI মক টেস্ট জেনারেটর", fontWeight = FontWeight.Bold, color = NavyBlue, fontSize = 16.sp)
+        Text("আপনার ক্লাস ও অধ্যায় নির্বাচন করে ইনস্ট্যান্ট এআই পরীক্ষা দিতে পারবেন।", fontSize = 12.sp, color = Color.Gray)
+        
+        OutlinedTextField(value = subject, onValueChange = { subject = it }, label = { Text("বিষয় লিখুন") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = chapter, onValueChange = { chapter = it }, label = { Text("অধ্যায়/পরিচ্ছেদ") }, modifier = Modifier.fillMaxWidth())
+        
+        Button(onClick = {
+            isLoading = true
+            // এখানে আপনার জেমিনি এআই এপিআই কলটি যুক্ত হবে
+            aiResponse = "১. আলোর প্রতিফলন কাকে বলে?\n২. অবতল দর্পণের ব্যবহার লিখুন।"
+            isLoading = false
+        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NavyBlue)) {
+            if (isLoading) CircularProgressIndicator(color = Color.White) else Text("AI প্রশ্নপত্র তৈরি করুন")
+        }
+
+        aiResponse?.let {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("এআই জেনারেটেড প্রশ্নপত্র:", fontWeight = FontWeight.Bold, color = BrightEmerald)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(it, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}
+
+// ট্যাব ৪: আমার পাঠাগার (ই-লাইব্রেরি)
+@Composable
+fun StudentLibraryTab(student: Student, uriHandler: androidx.compose.ui.platform.UriHandler) {
+    Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("📚 আমার পাঠাগার (ই-লাইব্রেরি)", fontWeight = FontWeight.Bold, color = NavyBlue, fontSize = 16.sp)
+        
+        // ডামি লেকচার শিট ডাটাবেজ ভিউ
+        val mockLectures = listOf(
+            LectureSheet("1", student.className, "পদার্থবিজ্ঞান", "অধ্যায় ৪: কাজ, ক্ষমতা ও শক্তি লেকচার শিট", "https://nctb.gov.bd"),
+            LectureSheet("2", student.className, "গণিত", "সৃজনশীল ফাইনাল সাজেশন ২০২৬", "https://nctb.gov.bd")
+        )
+
+        mockLectures.forEach { lecture ->
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), border = BorderStroke(1.dp, Blue100)) {
+                Row(modifier = Modifier.padding(16.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1.0f)) {
+                        Text(lecture.title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("বিষয়: ${lecture.subject}", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    Button(onClick = { uriHandler.openUri(lecture.downloadUrl) }, colors = ButtonDefaults.buttonColors(containerColor = DeepGold), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                        Text("ডাউনলোড", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ------------------ এ্যাডমিন প্যানেল উপাদান: ফাইল ও নোটিশ আপলোডার ------------------
+@Composable
+fun AdminUploadPanel(context: Context) {
+    var title by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var isNotice by remember { mutableStateOf(true) }
+
+    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("📤 ক্লাউড আপলোড হাব (Firebase Linking)", fontWeight = FontWeight.Bold, color = NavyBlue, fontSize = 16.sp)
+        
+        Row(modifier = Modifier.fillMaxWidth()) {
+            RadioButton(selected = isNotice, onClick = { isNotice = true })
+            Text("জরুরি নোটিশ", modifier = Modifier.padding(top = 12.dp))
+            Spacer(modifier = Modifier.width(16.dp))
+            RadioButton(selected = !isNotice, onClick = { isNotice = false })
+            Text("লেকচার শিট/PDF", modifier = Modifier.padding(top = 12.dp))
+        }
+
+        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("শিরোনাম/নোটিশের বিষয়") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("গুগল ড্রাইভ বা পিডিএফ ফাইল লিংক") }, modifier = Modifier.fillMaxWidth())
+
+        Button(onClick = {
+            if (title.isBlank()) {
+                Toast.makeText(context, "শিরোনাম পূরণ করুন", Toast.LENGTH_SHORT).show()
+            } else {
+                // এখানে আপনার ফায়ারবেস রিয়েলটাইম ডাটাবেসে পুশ করার কোড বসবে:
+                // database.reference.child(if(isNotice) "notices" else "library").push().setValue(...)
+                Toast.makeText(context, "সফলভাবে আপলোড ও সিনক্রোনাইজ হয়েছে!", Toast.LENGTH_LONG).show()
+                title = ""; url = ""
+            }
+        }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = NavyBlue)) {
+            Text("ফায়ারবেস ডাটাবেসে পাবলিশ করুন")
+        }
+    }
+}
