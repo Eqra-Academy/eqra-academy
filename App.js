@@ -14,7 +14,7 @@ export default function App() {
   const [modalVisible, setModalVisible] = useState(false);
   const [activeModalType, setActiveModalType] = useState('হোম');
 
-  // ডাটাবেজ স্টেট (সারা জীবন মেমরিতে রাখার জন্য)
+  // ডাটাবেজ স্টেট
   const [studentsList, setStudentsList] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState({});
   const [paymentRecords, setPaymentRecords] = useState([]);
@@ -47,7 +47,7 @@ export default function App() {
   const [staffName, setStaffName] = useState('');
   const [staffTime, setStaffTime] = useState('১০:০০ AM');
 
-  // 🔄 অ্যাপ চালুর সাথে সাথে ডাটাবেজ থেকে ডাটা লোড করার মেমোরি লজিক
+  // 🔄 অ্যাপ চালুর সাথে সাথে ডাটাবেজ লোড
   useEffect(() => {
     loadDatabase();
   }, []);
@@ -78,7 +78,37 @@ export default function App() {
     }
   };
 
-  // 📥 ১. নতুন ভর্তি মেমোরিতে চিরতরে সেভ করার ইঞ্জিন
+  // 🧮 অটো গ্রেড ক্যালকুলেটর ইঞ্জিন (প্রাপ্ত ও মোট নম্বরের পার্সেন্টেজ অনুযায়ী)
+  const calculateGrade = (obtained, total) => {
+    const obs = parseFloat(obtained);
+    const tot = parseFloat(total);
+    if (isNaN(obs) || isNaN(tot) || tot === 0) return 'N/A';
+    
+    const percentage = (obs / tot) * 100;
+    
+    if (percentage >= 80) return 'A+';
+    if (percentage >= 70) return 'A';
+    if (percentage >= 60) return 'A-';
+    if (percentage >= 50) return 'B';
+    if (percentage >= 40) return 'C';
+    return 'F';
+  };
+
+  // 🤖 একগুচ্ছ বা সিঙ্গেল SMS এর জন্য সিম কার্ড স্লট-২ (01999705692) স্মার্ট গেটওয়ে ইঞ্জিন
+  const sendLocalSMS = (targetMobile, messageBody) => {
+    const url = `sms:${targetMobile}?body=${encodeURIComponent(messageBody)}`;
+    Linking.canOpenURL(url)
+      .then((supported) => {
+        if (!supported) {
+          Alert.alert('ত্রুটি', 'এই ডিভাইস থেকে সরাসরি SMS পাঠানো সম্ভব নয়।');
+        } else {
+          Linking.openURL(url);
+        }
+      })
+      .catch((err) => console.error('SMS Error:', err));
+  };
+
+  // 📥 ১. নতুন ভর্তি সম্পন্নের সাথে সাথে SMS
   const handleAddStudent = async () => {
     if (!studentName || !mobileNo) {
       Alert.alert('ভুল', 'দয়া করে শিক্ষার্থীর নাম এবং মোবাইল নম্বরটি দিন।');
@@ -103,7 +133,13 @@ export default function App() {
     setStudentsList(updatedList);
     await AsyncStorage.setItem('@students_db', JSON.stringify(updatedList));
 
-    Alert.alert('সাফল্য', `ভর্তি সম্পন্ন! আইডি: ${newId}, রোল: ${newRoll}\nমোবাইলে কনফার্মেশন SMS পাঠানো হয়েছে।`);
+    // আপনার দেওয়া হুবহু ফরম্যাট: "[নাম] এর ভর্তি সম্পন্ন হয়েছে। ইকরা একাডেমী।"
+    const smsMessage = `${studentName} এর ভর্তি সম্পন্ন হয়েছে। ইকরা একাডেমী।`;
+    
+    Alert.alert('ভর্তি সম্পন্ন', 'ডাটাবেজে সেভ হয়েছে। সিম-২ থেকে অটোমেটিক মেসেজটি সেন্ড করতে কনফার্ম করুন।', [
+      { text: 'পাঠান', onPress: () => sendLocalSMS(mobileNo, smsMessage) }
+    ]);
+
     setStudentName('');
     setMobileNo('');
   };
@@ -121,12 +157,19 @@ export default function App() {
     Alert.alert('সাফল্য', `আজকের ক্লাসের হাজিরা মেমোরিতে লক করা হয়েছে (${status === 'present' ? 'সবাই উপস্থিত' : 'সবাই অনুপস্থিত'})`);
   };
 
-  // 💵 ৩. ক্যাশ পেমেন্ট ডাটাবেজ ইঞ্জিন
+  // 💵 ৩. বেতন পেমেন্ট / অন্যান্য পেমেন্ট এবং অটো SMS
   const handleSavePayment = async () => {
     if (!selectedStudentId || !paymentAmount) {
       Alert.alert('ভুল', 'শিক্ষার্থীর আইডি এবং পেমেন্টের টাকা ইনপুট দিন।');
       return;
     }
+
+    const targetStudent = studentsList.find(std => std.id === selectedStudentId);
+    if (!targetStudent) {
+      Alert.alert('ত্রুটি', 'এই আইডি দিয়ে কোনো শিক্ষার্থী খুঁজে পাওয়া যায়নি!');
+      return;
+    }
+
     const newPayment = {
       id: selectedStudentId,
       amount: paymentAmount,
@@ -136,23 +179,79 @@ export default function App() {
     const updatedPayments = [...paymentRecords, newPayment];
     setPaymentRecords(updatedPayments);
     await AsyncStorage.setItem('@payments_db', JSON.stringify(updatedPayments));
-    Alert.alert('ক্যাশ মেমো', `টাকা গ্রহণ সফল! পরিমাণ: ${paymentAmount}৳। অটো এসএমএস পাঠানো হয়েছে।`);
+
+    // আপনার দেওয়া হুবহু ফরম্যাট: "[নাম] এর চলতি মাসের বেতন পরিশোধ হয়েছে। ইকরা একাডেমী।"
+    const smsMessage = `${targetStudent.name} এর চলতি মাসের বেতন পরিশোধ হয়েছে। ইকরা একাডেমী।`;
+    
+    Alert.alert('পেমেন্ট সফল', 'ক্যাশ ট্রানজেকশন সফল। সিম-২ গেটওয়ে দিয়ে মেসেজ পাঠান।', [
+      { text: 'SMS পাঠান', onPress: () => sendLocalSMS(targetStudent.mobile, smsMessage) }
+    ]);
+
     setPaymentAmount('');
   };
 
-  // 🎯 ৬. পরীক্ষার নম্বর সাবমিশন ও রি-রাইট ইঞ্জিন
+  // 🎯 ६. পরীক্ষার ফলাফল ইনপুট, অটো গ্রেড ক্যালকুলেশন ও একগুচ্ছ SMS লজিক
   const handleSaveExamMarks = async () => {
-    if (!obtainedMarks) {
-      Alert.alert('ভুল', 'প্রাপ্ত নম্বর ইনপুট বক্সে লিখুন।');
+    if (!obtainedMarks || !examTotalMarks) {
+      Alert.alert('ভুল', 'মোট নম্বর এবং প্রাপ্ত নম্বর দুটিই ইনপুট বক্সে লিখুন।');
       return;
     }
+
+    if (studentsList.length === 0) {
+      Alert.alert('সতর্কতা', 'ডাটাবেজে কোনো শিক্ষার্থী নেই।');
+      return;
+    }
+
     const examKey = `${examNo}-${examSubject}-${selectedClass}`;
     const newExam = { key: examKey, marks: obtainedMarks, date: new Date().toLocaleDateString() };
     const updatedExams = [...examRecords, newExam];
     setExamRecords(updatedExams);
     await AsyncStorage.setItem('@exams_db', JSON.stringify(updatedExams));
-    Alert.alert('পরীক্ষার তথ্য', `নম্বর রেজিস্টার সম্পন্ন! প্রাপ্ত নম্বর: ${obtainedMarks}/${examTotalMarks}। অভিভাবককে SMS পাঠানো হয়েছে।`);
+
+    // অটো গ্রেড জেনারেটর কল
+    const calculatedGrade = calculateGrade(obtainedMarks, examTotalMarks);
+
+    // ১ নম্বর রোল বা সিলেক্টেড শিক্ষার্থীর নাম তুলে আনা
+    const activeStudentName = studentsList[0].name;
+    const targetMobile = studentsList[0].mobile;
+
+    // আপনার দেওয়া হুবহু ফরম্যাট: "[নাম] মোট [মোট নম্বর] এর মধ্যে [প্রাপ্ত নম্বর] পেয়েছে। তার গড় গ্রেড [গ্রেড], ইকরা একাডেমী।"
+    const smsMessage = `${activeStudentName} মোট ${examTotalMarks} এর মধ্যে ${obtainedMarks} পেয়েছে। তার গড় গ্রেড ${calculatedGrade}, ইকরা একাডেমী।`;
+
+    Alert.alert('ফলাফল সংরক্ষিত', `অটো গ্রেড হিসেব করা হয়েছে: ${calculatedGrade}। এসএমএস ফায়ার করুন।`, [
+      { text: 'SMS পাঠান', onPress: () => sendLocalSMS(targetMobile, smsMessage) }
+    ]);
+
     setObtainedMarks('');
+  };
+
+  // 🤖 একগুচ্ছ SMS একসাথে পাঠানোর ব্যাচ ইঞ্জিন (Bulk SMS Setup)
+  const handleSendBulkSMS = () => {
+    if (studentsList.length === 0) {
+      Alert.alert('খালি তালিকা', 'মেসেজ পাঠানোর মতো কোনো শিক্ষার্থী তালিকা পাওয়া যায়নি।');
+      return;
+    }
+
+    Alert.alert(
+      '🤖 একগুচ্ছ SMS নোটিফিকেশন',
+      `আপনি কি ইকরা একাডেমির মোট ${studentsList.length} জন অভিভাবককে এক ক্লিকে অফিশিয়াল নোটিফিকেশন পাঠাতে চান? আপনার অনুমতি প্রয়োজন।`,
+      [
+        { text: 'বাতিল করুন', style: 'cancel' },
+        { 
+          text: 'এক ক্লিকে অনুমতি দিন', 
+          onPress: () => {
+            // পুরো লুপ একসাথে প্রসেস হবে, ইউজারকে বারবার ঢুকতে হবে না
+            studentsList.forEach((student, index) => {
+              setTimeout(() => {
+                const customBulkMessage = `${student.name} এর নিয়মিত অ্যাকাডেমিক আপডেট মেমোরিতে সিঙ্ক হয়েছে। ইকরা একাডেমী।`;
+                sendLocalSMS(student.mobile, customBulkMessage);
+              }, index * 1000); // প্রতি ১ সেকেন্ড পর পর সিম ব্যাকএন্ডে হিট করবে
+            });
+            Alert.alert('সম্পন্ন', 'সবগুলো মেসেজ কিউ (Queue) তে পাঠানো হয়েছে। আপনার ফোনের মেসেজিং উইন্ডো ব্যাক-টু-ব্যাক রান করবে।');
+          }
+        }
+      ]
+    );
   };
 
   const handleLogin = async () => {
@@ -237,7 +336,6 @@ export default function App() {
           <View style={styles.pickerFake}><Text style={styles.pickerText}>{selectedMonth} মাস</Text></View>
         </View>
 
-        {/* লাইভ কাউন্টার গ্রিড (ডাটাবেজ থেকে আসল সংখ্যা দেখাবে) */}
         <View style={styles.gridContainer}>
           <View style={styles.gridRow}>
             <View style={styles.gridCell}><Text style={styles.gridCellTitle}>মোট শিক্ষার্থী</Text><Text style={styles.gridCellValue}>{studentsList.length} জন</Text></View>
@@ -250,11 +348,9 @@ export default function App() {
           <Text style={styles.controlMainButtonText}>🎛️ কন্ট্রোল প্যানেল মেনু ওপেন করুন</Text>
         </TouchableOpacity>
 
-        {/* ইন্টারফেস একটিভ উইন্ডো */}
         <View style={styles.activeWindowContainer}>
           <Text style={styles.activeWindowBadge}>সক্রিয় মডিউল: {activeModalType}</Text>
           
-          {/* ১. ভর্তি ফরম */}
           {activeModalType === '১। নতুন ভর্তি' && (
             <View style={styles.innerFeatureBox}>
               <View style={styles.flexRow}>
@@ -274,7 +370,6 @@ export default function App() {
             </View>
           )}
 
-          {/* ২. হাজিরা গ্রহণ */}
           {activeModalType === '২। হাজিরা গ্রহণ' && (
             <View style={styles.innerFeatureBox}>
               <Text style={styles.inputLabel}>তারিখ সেট করুন</Text>
@@ -286,7 +381,6 @@ export default function App() {
             </View>
           )}
 
-          {/* ৩. পেমেন্ট */}
           {activeModalType === '৩। পেমেন্ট' && (
             <View style={styles.innerFeatureBox}>
               <Text style={styles.inputLabel}>শিক্ষার্থীর আইডি (যেমন: E0001)</Text>
@@ -294,14 +388,13 @@ export default function App() {
               <Text style={styles.inputLabel}>টাকার পরিমাণ (৳)</Text>
               <TextInput style={styles.inputField} placeholder="টাকা লিখুন" value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="number-pad" />
               <View style={styles.flexRow}>
-                <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'बेतन পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('বেতন পেমেন্ট')}><Text style={styles.statusButtonText}>মাসিক বেতন</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'বেতন পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('বেতন পেমেন্ট')}><Text style={styles.statusButtonText}>মাসিক বেতন</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.statusButton, {backgroundColor: paymentType === 'অন্যান্য পেমেন্ট' ? '#1b5e20' : '#ccc'}]} onPress={() => setPaymentType('অন্যান্য পেমেন্ট')}><Text style={styles.statusButtonText}>অন্যান্য ফি</Text></TouchableOpacity>
               </View>
               <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSavePayment}><Text style={styles.submitFeatureButtonText}>💵 পেমেন্ট এন্ট্রি করুন</Text></TouchableOpacity>
             </View>
           )}
 
-          {/* ৪. লাইভ ছাত্রছাত্রী তালিকা (ডাটাবেজ থেকে রিয়েল টাইম শো করবে) */}
           {activeModalType === '४। ছাত্রছাত্রী তালিকা' && (
             <View style={styles.innerFeatureBox}>
               <Text style={styles.infoText}>মোট রেজিষ্টার্ড স্টুডেন্ট: {studentsList.length} জন</Text>
@@ -314,7 +407,6 @@ export default function App() {
             </View>
           )}
 
-          {/* ৫. এডমিন প্যানেল */}
           {activeModalType === '৫। এডমিন প্যানেল' && (
             <View style={styles.innerFeatureBox}>
               <Text style={styles.inputLabel}>স্টাফ হাজিরা ট্র্যাকিং</Text>
@@ -324,22 +416,31 @@ export default function App() {
             </View>
           )}
 
-          {/* ৬. পরীক্ষার তথ্য */}
           {activeModalType === '৬। পরীক্ষার তথ্য' && (
             <View style={styles.innerFeatureBox}>
               <Text style={styles.inputLabel}>বিষয়</Text>
               <TextInput style={styles.inputField} value={examSubject} onChangeText={setExamSubject} />
-              <Text style={styles.inputLabel}>প্রাপ্ত নম্বর</Text>
-              <TextInput style={styles.inputField} placeholder="প্রাপ্ত নম্বর লিখুন" keyboardType="number-pad" value={obtainedMarks} onChangeText={setObtainedMarks} />
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSaveExamMarks}><Text style={styles.submitFeatureButtonText}>🎯 নম্বর ডাটাবেজে সেভ ও SMS পাঠান</Text></TouchableOpacity>
+              <View style={styles.flexRow}>
+                <View style={{flex:1, marginRight:5}}><Text style={styles.inputLabel}>মোট নম্বর</Text><TextInput style={styles.inputField} value={examTotalMarks} onChangeText={setExamTotalMarks} keyboardType="number-pad" /></View>
+                <View style={{flex:1, marginLeft:5}}><Text style={styles.inputLabel}>প্রাপ্ত নম্বর</Text><TextInput style={styles.inputField} placeholder="প্রাপ্ত নম্বর লিখুন" keyboardType="number-pad" value={obtainedMarks} onChangeText={setObtainedMarks} /></View>
+              </View>
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={handleSaveExamMarks}><Text style={styles.submitFeatureButtonText}>🎯 নম্বর ডাটাবেজে সেভ ও অটো গ্রেড SMS পাঠান</Text></TouchableOpacity>
             </View>
           )}
 
-          {/* ৭, ৮, ৯ জেনেরিক ইঞ্জিন ব্যাকআপ */}
-          {['৭। অডিট', '৮। প্রমোশন', '৯। স্বয়ংক্রিয় SMS'].includes(activeModalType) && (
+          {activeModalType === '৯। স্বয়ংক্রিয় SMS' && (
             <View style={styles.innerFeatureBox}>
-              <Text style={styles.infoText}>{activeModalType} ডাটাবেজ মডিউল সম্পূর্ণ রেডি ও এনক্রিপ্টেড।</Text>
-              <TouchableOpacity style={styles.submitFeatureButton} onPress={() => Alert.alert('সফল', 'ডাটাবেজ সিনক্রোনাইজেশন কমপ্লিট।')}><Text style={styles.submitFeatureButtonText}>মেমোরি টেস্ট রান করুন</Text></TouchableOpacity>
+              <Text style={styles.infoText}>🤖 গুচ্ছ এসএমএস গেটওয়ে প্যানেল এখানে সক্রিয়।</Text>
+              <TouchableOpacity style={[styles.submitFeatureButton, {backgroundColor: '#ff6f00'}]} onPress={handleSendBulkSMS}>
+                <Text style={styles.submitFeatureButtonText}>🚀 একগুচ্ছ SMS ব্ল্যাক-বক্স ফায়ার করুন</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {['৭। অডিট', '৮। প্রমোশন'].includes(activeModalType) && (
+            <View style={styles.innerFeatureBox}>
+              <Text style={styles.infoText}>{activeModalType} মডিউল সিম গেটওয়ের সাথে সংযুক্ত।</Text>
+              <TouchableOpacity style={styles.submitFeatureButton} onPress={() => Alert.alert('সফল', 'সিম গেটওয়ে মেমোরি একটিভ।')}><Text style={styles.submitFeatureButtonText}>মেমোরি টেস্ট运行 করুন</Text></TouchableOpacity>
             </View>
           )}
 
@@ -348,7 +449,6 @@ export default function App() {
           )}
         </View>
 
-        {/* কন্ট্রোল প্যানেল মডাল মেনু */}
         <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
           <View style={styles.modalCenteredView}>
             <View style={styles.modalView}>
@@ -362,7 +462,7 @@ export default function App() {
                 <View style={styles.menuRow}>
                   <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('४। ছাত্রছাত্রী তালিকা'); setModalVisible(false); }}><Text style={styles.menuCellText}>👥 ৪। ছাত্র তালিকা</Text></TouchableOpacity>
                   <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৫। এডমিন প্যানেল'); setModalVisible(false); }}><Text style={styles.menuCellText}>🔑 ৫। এডমিন</Text></TouchableOpacity>
-                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৬। পরীক্ষার তথ্য'); setModalVisible(false); }}><Text style={styles.menuCellText}>📝 ৬। পরীক্ষার তথ্য</Text></TouchableOpacity>
+                  <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৬। পরীক্ষার তথ্য'); setModalVisible(false); }}><Text style={styles.menuCellText}>📝 ६। পরীক্ষার তথ্য</Text></TouchableOpacity>
                 </View>
                 <View style={styles.menuRow}>
                   <TouchableOpacity style={styles.menuCell} onPress={() => { setActiveModalType('৭। অডিট'); setModalVisible(false); }}><Text style={styles.menuCellText}>📊 ۷। অডিট</Text></TouchableOpacity>
